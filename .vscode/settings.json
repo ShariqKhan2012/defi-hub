@@ -1,0 +1,13 @@
+{
+  "editor.quickSuggestions": {
+    "comments": "on",
+    "strings": "on"
+  },
+  "solidity.remappings": [
+    "@openzeppelin/=contracts/lib/openzeppelin-contracts/",
+    "@chainlink/=contracts/lib/chainlink-brownie-contracts/",
+    "forge-std/=contracts/lib/forge-std/src/"
+  ],
+  "solidity.packageDefaultDependenciesContractsDirectory": "contracts/src",
+  "solidity.packageDefaultDependenciesDirectory": "contracts/lib"
+}

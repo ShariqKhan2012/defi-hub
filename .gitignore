@@ -1,0 +1,67 @@
+# ============================================================
+# FRONTEND (Next.js)
+# ============================================================
+
+# dependencies
+frontend/node_modules
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+
+# testing
+frontend/coverage
+
+# next.js
+frontend/.next/
+frontend/out/
+
+# production
+frontend/build
+
+# typescript
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# vercel
+frontend/.vercel
+
+# ============================================================
+# CONTRACTS (Foundry)
+# ============================================================
+
+# Compiler files
+contracts/cache/
+contracts/out/
+
+# Ignores development broadcast logs
+!contracts/broadcast
+contracts/broadcast/*/31337/
+contracts/broadcast/**/dry-run/
+
+# Docs
+contracts/docs/
+
+# ============================================================
+# SHARED / MISC
+# ============================================================
+
+# env files
+.env*
+**/.env*
+
+# misc
+.DS_Store
+*.pem
+
+# debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# example requests
+.example.request
