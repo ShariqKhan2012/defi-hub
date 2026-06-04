@@ -1,3 +1,62 @@
 ## DeFI Hub
 
 A web3 application that acts as a hub for 5 independent DeFi features: Staking, Merkle Airdrop, DAO Voting, Gasless Transactions, and Automated Lottery.
+
+### Setup
+
+git init
+mkdir contracts
+cd contracts
+forge init . --no-git
+forge install OpenZeppelin/openzeppelin-contracts --no-git
+forge install smartcontractkit/chainlink-brownie-contracts --no-git
+
+#add a .gitignore file to the 'contracts' directory of the project
+echo "# Compiler files
+cache/
+out/
+
+# Ignores development broadcast logs
+
+!/broadcast
+/broadcast/\*/31337/
+/broadcast/\*\*/dry-run/
+
+# Docs
+
+docs/
+
+# Dotenv file
+
+.env" > .gitignore
+
+cd contracts
+
+# Create the standard .gitignore
+
+# (with the contents above)
+
+# Remove lib from regular git tracking
+
+git rm -r --cached lib/
+
+# From inside contracts/
+
+rm -rf lib/forge-std
+rm -rf lib/openzeppelin-contracts
+rm -rf lib/chainlink-brownie-contracts
+
+# Then register as submodules
+
+git submodule add https://github.com/foundry-rs/forge-std lib/forge-std
+git submodule add https://github.com/openzeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+git submodule add https://github.com/smartcontractkit/chainlink-brownie-contracts lib/chainlink-brownie-contracts
+
+git add .
+git commit -m "add standard .gitignore, switch lib to git submodules"
+git push
+
+npx create-next-app@latest frontend
+cd frontend
+npm install wagmi@^2.9.0 viem @tanstack/react-query
+npm install @rainbow-me/rainbowkit

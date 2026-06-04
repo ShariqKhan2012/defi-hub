@@ -1,6 +1,9 @@
 build:
 	cd contracts && forge build
 
+clean:
+	cd contracts && forge clean
+
 test:
 	cd contracts && forge test
 
