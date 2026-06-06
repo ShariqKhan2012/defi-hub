@@ -59,62 +59,51 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
  */
 contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ TYPE DECLARATIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTANTS
     // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ IMMUTABLES
-    // ╚═══════════════════════════════════════════════════════════════════════
+    uint256 constant DECIMAL_PRECISION = 18;
+    uint256 constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK 
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ STATE VARIABLES
     // ╚═══════════════════════════════════════════════════════════════════════
-    uint256 private _someVariable;
+    mapping (address claimant => uint256 timestamp) private _lastFaucetClaim;
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ EVENTS
     // ╚═══════════════════════════════════════════════════════════════════════
+    event GTK__FaucetUsed(address indexed claimant);
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ ERRORS
     // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ MODIFIERS
-    // ╚═══════════════════════════════════════════════════════════════════════
+    error GTK__FaucetUsedBefore24Hours();
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTRUCTOR
     // ╚═══════════════════════════════════════════════════════════════════════
-    constructor() ERC20("Governance Token", "GT") ERC20Permit("Governance Token") Ownable(msg.sender) {}
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ RECEIVER FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ FALLBACK FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ EXTERNAL STATE-CHANGING FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ EXTERNAL VIEW FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ EXTERNAL PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
+    constructor() ERC20("Governance Token", "GTK") ERC20Permit("Governance Token") Ownable(msg.sender) {}
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ PUBLIC STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
+    function mint(address to, uint256 amount) public onlyOwner {
+        _mint(to, amount);
+        // Delegate the voting power to the recipient
+        _delegate(to, to);
+    }
+
+    function faucet() public {
+        if(_lastFaucetClaim[msg.sender] + 24 hours > block.timestamp) {
+            revert GTK__FaucetUsedBefore24Hours();
+        }
+        _lastFaucetClaim[msg.sender] = block.timestamp;
+        _mint(msg.sender, FAUCET_CLAIM_AMOUNT);
+        // Delegate the voting power to the claimant themselves
+        _delegate(msg.sender, msg.sender); 
+
+        emit GTK__FaucetUsed(msg.sender);
+    }
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ PUBLIC VIEW FUNCTIONS
@@ -128,16 +117,12 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PUBLIC PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
     // ║ INTERNAL STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Short description
-     * @dev Required override for ERC20Votes and ERC20Permit
+     * @notice Updates the voting power of the sender and receiver
+     * @dev Required override for ERC20Votes and ERC20Permit. Resolves ERC20 + ERC20Votes conflict
      * @dev It is called internally by the ERC20Votes and ERC20Permit contracts on every transfer/mint/burn.
      * @dev Calls the parent contracts' _update function to update the voting power of the sender and receiver
      *
@@ -148,23 +133,4 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
         super._update(from, to, value);
     }
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ INTERNAL VIEW FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ INTERNAL PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE STATE-CHANGING FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE VIEW FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
 }
