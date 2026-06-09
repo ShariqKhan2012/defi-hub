@@ -8,6 +8,9 @@ import {GovernanceToken} from "../src/GovernanceToken.sol";
 import {GovernanceTokenDeployer} from "../script/GovernanceTokenDeployer.s.sol";
 
 contract GovernanceTokenTest is Test {
+    uint256 public constant DECIMAL_PRECISION = 18;
+    uint256 public constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+
     address DEFAULT_ADDRESS;
     GovernanceToken private _gtk;
     address ALICE = makeAddr("ALICE");
@@ -90,5 +93,56 @@ contract GovernanceTokenTest is Test {
         vm.prank(DEFAULT_ADDRESS);
 
         _gtk.mint(ALICE, 1000);
+    }
+
+    function testAnyoneCanUseFaucet() public {
+        uint256 initialBalanceOfAlice = _gtk.balanceOf(ALICE);
+        assertEq(initialBalanceOfAlice, 0);
+        vm.prank(ALICE);
+        _gtk.faucet();
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+    }
+
+    function testCanNotReuseFaucetBefore24Hours() public {
+        vm.prank(ALICE);
+        _gtk.faucet();
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+        //Simulate passing of 23 hours, 59 minutes, and 59 seconds
+        vm.warp(block.timestamp + 23 hours + 59 minutes + 59 seconds);
+
+        vm.expectRevert(GovernanceToken.GTK__FaucetUsedBefore24Hours.selector);
+        vm.prank(ALICE);
+        _gtk.faucet();
+        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        // The final balance should still be the amount received in the first attempt
+        assertEq(updatedFinalBalanceOfAlice, finalBalanceOfAlice);
+    }
+
+    function testCanReuseFaucetAfter24Hours() public {
+        vm.prank(ALICE);
+        _gtk.faucet();
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+        //Simulate passing of
+        vm.warp(block.timestamp + 23 hours + 59 minutes + 60 seconds);
+        vm.prank(ALICE);
+        _gtk.faucet();
+
+        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(ALICE);
+
+        /**
+         * The final balance should be the sum of the amounts received in the
+         * first and second attempts
+         */
+        assertEq(updatedFinalBalanceOfAlice, 2 * finalBalanceOfAlice);
+    }
+
+    function testUsingFaucetEmitsUsageEvent() public {
+        vm.prank(ALICE);
+        vm.expectEmit();
+        emit GovernanceToken.GTK__FaucetUsed(ALICE);
+        _gtk.faucet();
     }
 }
