@@ -61,13 +61,13 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTANTS
     // ╚═══════════════════════════════════════════════════════════════════════
-    uint256 constant public DECIMAL_PRECISION = 18;
-    uint256 constant public FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK 
+    uint256 public constant DECIMAL_PRECISION = 18;
+    uint256 public constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ STATE VARIABLES
     // ╚═══════════════════════════════════════════════════════════════════════
-    mapping (address claimant => uint256 timestamp) private _lastFaucetClaim;
+    mapping(address claimant => uint256 timestamp) private _lastFaucetClaim;
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ EVENTS
@@ -94,13 +94,14 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     }
 
     function faucet() public {
-        if(_lastFaucetClaim[msg.sender] + 24 hours > block.timestamp) {
+        // Proceed only if 24 hours have elapsed since the last usage of the faucet
+        if (_lastFaucetClaim[msg.sender] != 0 && (block.timestamp < _lastFaucetClaim[msg.sender] + 24 hours)) {
             revert GTK__FaucetUsedBefore24Hours();
         }
         _lastFaucetClaim[msg.sender] = block.timestamp;
         _mint(msg.sender, FAUCET_CLAIM_AMOUNT);
         // Delegate the voting power to the claimant themselves
-        _delegate(msg.sender, msg.sender); 
+        _delegate(msg.sender, msg.sender);
 
         emit GTK__FaucetUsed(msg.sender);
     }
