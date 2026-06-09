@@ -61,8 +61,8 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTANTS
     // ╚═══════════════════════════════════════════════════════════════════════
-    uint256 constant DECIMAL_PRECISION = 18;
-    uint256 constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK 
+    uint256 constant public DECIMAL_PRECISION = 18;
+    uint256 constant public FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK 
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ STATE VARIABLES
