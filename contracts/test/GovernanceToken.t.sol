@@ -13,13 +13,13 @@ contract GovernanceTokenTest is Test {
     uint256 public constant FAUCET_CLAIM_AMOUNT_IN_WEI = 3000 * (10 ** DECIMAL_PRECISION); // 3000 GTK
     uint256 public constant TRANSFER_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
 
-    address DEFAULT_ADDRESS;
+    address DEFAULT_SENDER_ADDRESS;
     GovernanceToken private _gtk;
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
 
     function setUp() public {
-        DEFAULT_ADDRESS = vm.envAddress("ANVIL_DEPLOYER_ACCOUNT");
+        DEFAULT_SENDER_ADDRESS = vm.envAddress("ANVIL_DEPLOYER_ACCOUNT");
         GovernanceTokenDeployer deployer = new GovernanceTokenDeployer();
         _gtk = deployer.run();
     }
@@ -49,7 +49,7 @@ contract GovernanceTokenTest is Test {
     function testOwnership() public view {
         address owner = _gtk.owner();
         assertEq(owner, msg.sender);
-        assertEq(owner, DEFAULT_ADDRESS);
+        assertEq(owner, DEFAULT_SENDER_ADDRESS);
     }
 
     function testInitialSupply() public view {
@@ -76,7 +76,7 @@ contract GovernanceTokenTest is Test {
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
-        vm.prank(DEFAULT_ADDRESS);
+        vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
         uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(finalBalanceOfAlice, MINT_AMOUNT_IN_WEI);
@@ -98,7 +98,7 @@ contract GovernanceTokenTest is Test {
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
-        vm.prank(DEFAULT_ADDRESS);
+        vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
     }
 
@@ -177,7 +177,7 @@ contract GovernanceTokenTest is Test {
     function testAutoDelegatesToUserOnMint() public {
         address delegateeOfAliceBeforeMint = _gtk.delegates(alice);
         assertEq(delegateeOfAliceBeforeMint, address(0));
-        vm.prank(DEFAULT_ADDRESS);
+        vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
         address delegateeOfAliceAfterMint = _gtk.delegates(alice);
         assertEq(delegateeOfAliceAfterMint, alice);
@@ -210,5 +210,92 @@ contract GovernanceTokenTest is Test {
         uint256 votingPowerOfBobAfterTransfer = _gtk.getVotes(bob);
         assertEq(votingPowerOfAliceAfterTransfer, (FAUCET_CLAIM_AMOUNT_IN_WEI - TRANSFER_AMOUNT_IN_WEI));
         assertEq(votingPowerOfBobAfterTransfer, TRANSFER_AMOUNT_IN_WEI);
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ CHECKPOINTS
+    // ╚═══════════════════════════════════════════════════════════════════════
+    function testCannotQueryCurrentBlock() public {
+        vm.expectRevert();
+        _gtk.getPastVotes(alice, block.number); // must be strictly past
+    }
+
+    function testCheckpointIsCreatedOnMinting() public {
+        uint256 mintBlock = block.number;
+
+        vm.prank(DEFAULT_SENDER_ADDRESS);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+
+        /**
+         * Advance one block ahead, so that mintBlock is
+         * now in the past, and we can check past snapshot
+         */
+        vm.roll(mintBlock + 1);
+        assertEq(_gtk.getPastVotes(alice, mintBlock), MINT_AMOUNT_IN_WEI);
+    }
+
+    function testCheckpointIsCreatedOnUsingFaucet() public {
+        uint256 mintBlock = block.number;
+
+        vm.prank(alice);
+        _gtk.faucet();
+
+        /**
+         * Advance one block ahead, so that mintBlock is
+         * now in the past, and we can check past snapshot
+         */
+        vm.roll(mintBlock + 1);
+        assertEq(_gtk.getPastVotes(alice, mintBlock), FAUCET_CLAIM_AMOUNT_IN_WEI);
+    }
+
+    function testCheckpointUpdatesOnTransfer() public {
+        vm.prank(DEFAULT_SENDER_ADDRESS);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+
+        uint256 snapshotBlock = block.number;
+        vm.roll(snapshotBlock + 1);
+
+        vm.prank(alice);
+        _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        //Since transfer does not auto-delegate, we need to do it explicityly
+        vm.prank(bob);
+        _gtk.delegate(bob);
+
+        vm.roll(block.number + 1);
+
+        // At snapshot, alice had MINT_AMOUNT_IN_WEI
+        assertEq(_gtk.getPastVotes(alice, snapshotBlock), MINT_AMOUNT_IN_WEI);
+        // At snapshot, bob had none
+        assertEq(_gtk.getPastVotes(bob, snapshotBlock), 0);
+
+        // Now alice has (MINT_AMOUNT_IN_WEI - TRANSFER_AMOUNT_IN_WEI),
+        assertEq(_gtk.getVotes(alice), MINT_AMOUNT_IN_WEI - TRANSFER_AMOUNT_IN_WEI);
+        // Now bob has TRANSFER_AMOUNT_IN_WEI
+        assertEq(_gtk.getVotes(bob), TRANSFER_AMOUNT_IN_WEI);
+    }
+
+    function testPastVotesReflectSnapshotNotCurrentBalance() public {
+        uint256 initialBlock = block.number;
+        vm.prank(DEFAULT_SENDER_ADDRESS);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+
+        // Move one block ahead
+        uint256 nextBlock = initialBlock + 1;
+        vm.roll(nextBlock);
+        vm.prank(DEFAULT_SENDER_ADDRESS);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+
+        // Move one block ahead
+        uint256 nextToNextBlock = nextBlock + 1;
+        vm.roll(nextToNextBlock);
+        vm.prank(alice);
+        _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+
+        assertEq(_gtk.getPastVotes(alice, initialBlock), MINT_AMOUNT_IN_WEI);
+        assertEq(_gtk.getPastVotes(alice, nextBlock), 2 * MINT_AMOUNT_IN_WEI);
+
+        // Roll forward because we can not query snapshot at the current block
+        vm.roll(nextToNextBlock + 1);
+        assertEq(_gtk.getPastVotes(alice, nextToNextBlock), (2 * MINT_AMOUNT_IN_WEI) - TRANSFER_AMOUNT_IN_WEI);
     }
 }
