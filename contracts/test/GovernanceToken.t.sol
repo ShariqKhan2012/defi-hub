@@ -9,12 +9,14 @@ import {GovernanceTokenDeployer} from "../script/GovernanceTokenDeployer.s.sol";
 
 contract GovernanceTokenTest is Test {
     uint256 public constant DECIMAL_PRECISION = 18;
-    uint256 public constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+    uint256 public constant MINT_AMOUNT_IN_WEI = 5000 * (10 ** DECIMAL_PRECISION); // 5000 GTK
+    uint256 public constant FAUCET_CLAIM_AMOUNT_IN_WEI = 3000 * (10 ** DECIMAL_PRECISION); // 3000 GTK
+    uint256 public constant TRANSFER_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
 
     address DEFAULT_ADDRESS;
     GovernanceToken private _gtk;
-    address ALICE = makeAddr("ALICE");
-    address BOB = makeAddr("BOB");
+    address alice = makeAddr("alice");
+    address bob = makeAddr("bob");
 
     function setUp() public {
         DEFAULT_ADDRESS = vm.envAddress("ANVIL_DEPLOYER_ACCOUNT");
@@ -22,6 +24,9 @@ contract GovernanceTokenTest is Test {
         _gtk = deployer.run();
     }
 
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ DEPLOYMENT
+    // ╚═══════════════════════════════════════════════════════════════════════
     function testGTKDeployment() public view {
         assert(address(_gtk) != address(0));
 
@@ -52,26 +57,29 @@ contract GovernanceTokenTest is Test {
         assertEq(initialSupply, 1_000_000 * 10 ** 18);
     }
 
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ MINTING
+    // ╚═══════════════════════════════════════════════════════════════════════
     function testNonOwnerCanNotMintTokens() public {
-        uint256 initialBalanceOfAlice = _gtk.balanceOf(ALICE);
+        uint256 initialBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(initialBalanceOfAlice, 0);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
-        _gtk.mint(ALICE, 1000);
-        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(finalBalanceOfAlice, initialBalanceOfAlice);
     }
 
     function testOwnerCanMintTokens() public {
-        uint256 initialBalanceOfAlice = _gtk.balanceOf(ALICE);
+        uint256 initialBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(initialBalanceOfAlice, 0);
         /**
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
         vm.prank(DEFAULT_ADDRESS);
-        _gtk.mint(ALICE, 1000);
-        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
-        assertEq(finalBalanceOfAlice, 1000);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
+        assertEq(finalBalanceOfAlice, MINT_AMOUNT_IN_WEI);
     }
 
     function testMinEmitsTransferEvent() public {
@@ -84,53 +92,55 @@ contract GovernanceTokenTest is Test {
          * vm.expectEmit(false, false, false, false)
          */
         vm.expectEmit(true, true, true, true); // Natch all parameters. Equivalent to vm.expectEmit();
-        emit IERC20.Transfer(address(0), ALICE, 1000);
+        emit IERC20.Transfer(address(0), alice, MINT_AMOUNT_IN_WEI);
 
         /**
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
         vm.prank(DEFAULT_ADDRESS);
-
-        _gtk.mint(ALICE, 1000);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
     }
 
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ FAUCET
+    // ╚═══════════════════════════════════════════════════════════════════════
     function testAnyoneCanUseFaucet() public {
-        uint256 initialBalanceOfAlice = _gtk.balanceOf(ALICE);
+        uint256 initialBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(initialBalanceOfAlice, 0);
-        vm.prank(ALICE);
+        vm.prank(alice);
         _gtk.faucet();
-        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
-        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT_IN_WEI);
     }
 
     function testCanNotReuseFaucetBefore24Hours() public {
-        vm.prank(ALICE);
+        vm.prank(alice);
         _gtk.faucet();
-        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
-        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT_IN_WEI);
         //Simulate passing of 23 hours, 59 minutes, and 59 seconds
         vm.warp(block.timestamp + 23 hours + 59 minutes + 59 seconds);
 
         vm.expectRevert(GovernanceToken.GTK__FaucetUsedBefore24Hours.selector);
-        vm.prank(ALICE);
+        vm.prank(alice);
         _gtk.faucet();
-        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(alice);
         // The final balance should still be the amount received in the first attempt
         assertEq(updatedFinalBalanceOfAlice, finalBalanceOfAlice);
     }
 
     function testCanReuseFaucetAfter24Hours() public {
-        vm.prank(ALICE);
+        vm.prank(alice);
         _gtk.faucet();
-        uint256 finalBalanceOfAlice = _gtk.balanceOf(ALICE);
-        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT);
+        uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
+        assertEq(finalBalanceOfAlice, FAUCET_CLAIM_AMOUNT_IN_WEI);
         //Simulate passing of
         vm.warp(block.timestamp + 23 hours + 59 minutes + 60 seconds);
-        vm.prank(ALICE);
+        vm.prank(alice);
         _gtk.faucet();
 
-        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(ALICE);
+        uint256 updatedFinalBalanceOfAlice = _gtk.balanceOf(alice);
 
         /**
          * The final balance should be the sum of the amounts received in the
@@ -140,9 +150,65 @@ contract GovernanceTokenTest is Test {
     }
 
     function testUsingFaucetEmitsUsageEvent() public {
-        vm.prank(ALICE);
+        vm.prank(alice);
         vm.expectEmit();
-        emit GovernanceToken.GTK__FaucetUsed(ALICE);
+        emit GovernanceToken.GTK__FaucetUsed(alice);
         _gtk.faucet();
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ DELEGATION & VOTING POWER
+    // ╚═══════════════════════════════════════════════════════════════════════
+    function testVotingPowerIsZeroBeforeDelegation() public view {
+        uint256 votingPowerOfAliceBeforeDelegation = _gtk.getVotes(alice);
+        assertEq(votingPowerOfAliceBeforeDelegation, 0);
+    }
+
+    function testVotingPowerChangesAfterDelegation() public {
+        uint256 votingPowerOfAliceBeforeDelegation = _gtk.getVotes(alice);
+        assertEq(votingPowerOfAliceBeforeDelegation, 0);
+
+        vm.prank(alice);
+        _gtk.faucet();
+        uint256 votingPowerOfAliceAfterDelegation = _gtk.getVotes(alice);
+        assertEq(votingPowerOfAliceAfterDelegation, FAUCET_CLAIM_AMOUNT_IN_WEI);
+    }
+
+    function testAutoDelegatesToUserOnMint() public {
+        address delegateeOfAliceBeforeMint = _gtk.delegates(alice);
+        assertEq(delegateeOfAliceBeforeMint, address(0));
+        vm.prank(DEFAULT_ADDRESS);
+        _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
+        address delegateeOfAliceAfterMint = _gtk.delegates(alice);
+        assertEq(delegateeOfAliceAfterMint, alice);
+    }
+
+    function testAutoDelegatesToUserOnUsingFaucet() public {
+        address delegateeOfAliceBeforeMint = _gtk.delegates(alice);
+        assertEq(delegateeOfAliceBeforeMint, address(0));
+        vm.prank(alice);
+        _gtk.faucet();
+        address delegateeOfAliceAfterMint = _gtk.delegates(alice);
+        assertEq(delegateeOfAliceAfterMint, alice);
+    }
+
+    function testTransferUpdatesVotingPowerOfSenderAndRecepient() public {
+        vm.startPrank(alice);
+        _gtk.faucet();
+
+        uint256 votingPowerOfAliceBeforeTransfer = _gtk.getVotes(alice);
+        uint256 votingPowerOfBobBeforeTransfer = _gtk.getVotes(bob);
+        assertEq(votingPowerOfAliceBeforeTransfer, FAUCET_CLAIM_AMOUNT_IN_WEI);
+        assertEq(votingPowerOfBobBeforeTransfer, 0);
+        (bool success) = _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        assertTrue(success); //Confirm transfer was successful
+        vm.stopPrank();
+        //Since transfer does not auto-delegate, we need to do it explicityly
+        vm.prank(bob);
+        _gtk.delegate(bob);
+        uint256 votingPowerOfAliceAfterTransfer = _gtk.getVotes(alice);
+        uint256 votingPowerOfBobAfterTransfer = _gtk.getVotes(bob);
+        assertEq(votingPowerOfAliceAfterTransfer, (FAUCET_CLAIM_AMOUNT_IN_WEI - TRANSFER_AMOUNT_IN_WEI));
+        assertEq(votingPowerOfBobAfterTransfer, TRANSFER_AMOUNT_IN_WEI);
     }
 }

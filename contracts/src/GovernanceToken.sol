@@ -62,7 +62,7 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     // ║ CONSTANTS
     // ╚═══════════════════════════════════════════════════════════════════════
     uint256 public constant DECIMAL_PRECISION = 18;
-    uint256 public constant FAUCET_CLAIM_AMOUNT = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+    uint256 public constant FAUCET_CLAIM_AMOUNT_IN_WEI = 3000 * (10 ** DECIMAL_PRECISION); // 3000 GTK
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ STATE VARIABLES
@@ -87,8 +87,8 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ PUBLIC STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
-    function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount);
+    function mint(address to, uint256 amountInWei) public onlyOwner {
+        _mint(to, amountInWei);
         // Delegate the voting power to the recipient
         _delegate(to, to);
     }
@@ -99,7 +99,7 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
             revert GTK__FaucetUsedBefore24Hours();
         }
         _lastFaucetClaim[msg.sender] = block.timestamp;
-        _mint(msg.sender, FAUCET_CLAIM_AMOUNT);
+        _mint(msg.sender, FAUCET_CLAIM_AMOUNT_IN_WEI);
         // Delegate the voting power to the claimant themselves
         _delegate(msg.sender, msg.sender);
 
