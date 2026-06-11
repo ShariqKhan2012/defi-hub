@@ -12,16 +12,49 @@ contract GovernanceTokenTest is Test {
     uint256 public constant MINT_AMOUNT_IN_WEI = 5000 * (10 ** DECIMAL_PRECISION); // 5000 GTK
     uint256 public constant FAUCET_CLAIM_AMOUNT_IN_WEI = 3000 * (10 ** DECIMAL_PRECISION); // 3000 GTK
     uint256 public constant TRANSFER_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+    uint256 public constant ALLOWANCE_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+
+    uint256 constant ALICE_PRIVATE_KEY = 0x1;
+    uint256 constant BOB_PRIVATE_KEY = 0x2;
 
     address DEFAULT_SENDER_ADDRESS;
     GovernanceToken private _gtk;
-    address alice = makeAddr("alice");
-    address bob = makeAddr("bob");
+    address alice = vm.addr(ALICE_PRIVATE_KEY);
+    address bob = vm.addr(BOB_PRIVATE_KEY);
 
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ SETUP
+    // ╚═══════════════════════════════════════════════════════════════════════
     function setUp() public {
         DEFAULT_SENDER_ADDRESS = vm.envAddress("ANVIL_DEPLOYER_ACCOUNT");
         GovernanceTokenDeployer deployer = new GovernanceTokenDeployer();
         _gtk = deployer.run();
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ HELPER
+    // ╚═══════════════════════════════════════════════════════════════════════
+    function _buildPermitDigest(address owner, address spender, uint256 value, uint256 nonce, uint256 deadline)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                _gtk.DOMAIN_SEPARATOR(),
+                keccak256(
+                    abi.encode(
+                        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                        owner,
+                        spender,
+                        value,
+                        nonce,
+                        deadline
+                    )
+                )
+            )
+        );
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
@@ -256,7 +289,8 @@ contract GovernanceTokenTest is Test {
         vm.roll(snapshotBlock + 1);
 
         vm.prank(alice);
-        _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        (bool success) = _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        assertTrue(success); //Confirm transfer was successful
         //Since transfer does not auto-delegate, we need to do it explicityly
         vm.prank(bob);
         _gtk.delegate(bob);
@@ -289,7 +323,8 @@ contract GovernanceTokenTest is Test {
         uint256 nextToNextBlock = nextBlock + 1;
         vm.roll(nextToNextBlock);
         vm.prank(alice);
-        _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        (bool success) = _gtk.transfer(bob, TRANSFER_AMOUNT_IN_WEI);
+        assertTrue(success); //Confirm transfer was successful
 
         assertEq(_gtk.getPastVotes(alice, initialBlock), MINT_AMOUNT_IN_WEI);
         assertEq(_gtk.getPastVotes(alice, nextBlock), 2 * MINT_AMOUNT_IN_WEI);
@@ -297,5 +332,85 @@ contract GovernanceTokenTest is Test {
         // Roll forward because we can not query snapshot at the current block
         vm.roll(nextToNextBlock + 1);
         assertEq(_gtk.getPastVotes(alice, nextToNextBlock), (2 * MINT_AMOUNT_IN_WEI) - TRANSFER_AMOUNT_IN_WEI);
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ PERMIT
+    // ╚═══════════════════════════════════════════════════════════════════════
+    function testPermitGeneratesCorrectAllowance() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = _gtk.nonces(alice);
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, nonce, deadline);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PRIVATE_KEY, digest);
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+
+        assertEq(_gtk.allowance(alice, bob), ALLOWANCE_AMOUNT_IN_WEI);
+    }
+
+    function testExpiredPermitReverts() public {
+        uint256 deadline = block.timestamp - 1; // already expired
+        uint256 nonce = _gtk.nonces(alice);
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PRIVATE_KEY, digest);
+
+        vm.expectRevert();
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+    }
+
+    function testWrongSignerPermitReverts() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = _gtk.nonces(alice);
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, nonce, deadline);
+        // Bob signs instead of alice
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PRIVATE_KEY, digest);
+
+        vm.expectRevert();
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+    }
+
+    function testWrongNoncePermitReverts() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonce = _gtk.nonces(alice) + 1; // Use wrong nonce
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, nonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PRIVATE_KEY, digest);
+
+        vm.expectRevert();
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ NONCES
+    // ╚═══════════════════════════════════════════════════════════════════════
+    function testNoncesStartFromZero() public view {
+        assertEq(_gtk.nonces(alice), 0);
+    }
+
+    function testNoncesIncreaseOnSuccessfulPermit() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 initialNonce = _gtk.nonces(alice);
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, initialNonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PRIVATE_KEY, digest);
+
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+        assertEq(_gtk.nonces(alice), initialNonce + 1); //Nonce should have incremented by 1
+    }
+
+    function testNoncesDontIncreaseOnFailedPermit() public {
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 initialNonce = _gtk.nonces(alice);
+        uint256 wrongNonce = initialNonce + 1; //Use incorrect permit to cause failed permit
+
+        bytes32 digest = _buildPermitDigest(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, wrongNonce, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PRIVATE_KEY, digest);
+
+        vm.expectRevert();
+        _gtk.permit(alice, bob, ALLOWANCE_AMOUNT_IN_WEI, deadline, v, r, s);
+        assertEq(_gtk.nonces(alice), initialNonce); //Nonce should still be the same
     }
 }
