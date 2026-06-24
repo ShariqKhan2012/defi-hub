@@ -1,6 +1,7 @@
 [profile.default]
 remappings = [
   "@openzeppelin/=lib/openzeppelin-contracts/",
+  "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
   "@chainlink/=lib/chainlink-brownie-contracts/",
   "src=src",
   "script=script",

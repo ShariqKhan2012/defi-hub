@@ -99,11 +99,10 @@ contract GovernanceToken is ERC20, ERC20Votes, ERC20Permit, Ownable {
             revert GTK__FaucetUsedBefore24Hours();
         }
         _lastFaucetClaim[msg.sender] = block.timestamp;
+        emit GTK__FaucetUsed(msg.sender);
         _mint(msg.sender, FAUCET_CLAIM_AMOUNT_IN_WEI);
         // Delegate the voting power to the claimant themselves
         _delegate(msg.sender, msg.sender);
-
-        emit GTK__FaucetUsed(msg.sender);
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════

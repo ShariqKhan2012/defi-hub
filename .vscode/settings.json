@@ -5,6 +5,7 @@
   },
   "solidity.remappings": [
     "@openzeppelin/=contracts/lib/openzeppelin-contracts/",
+    "@openzeppelin-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/",
     "@chainlink/=contracts/lib/chainlink-brownie-contracts/",
     "forge-std/=contracts/lib/forge-std/src/"
   ],
