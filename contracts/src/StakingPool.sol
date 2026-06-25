@@ -46,48 +46,80 @@ import {GovernanceToken} from "./GovernanceToken.sol";
 /**
  * @title StakingPool
  * @author Shariq Hasan Khan
- * @notice This is the implementation of the Decentralized Stable Coin (DSC) contract.
+ *
+ * @notice This is the implementation of the StakingPool contract.
+ * @notice Main features:
+ * 1. A protocol that allows users to stake their GTK toens
+ * 2. Users can unstake, partially or fully, anytime they want to.
+ * 3. Users earn rewards proportional to the amount of the the tokens they have staked, and the
+ *    time they have staked the tokens for. The users can claim their rewards anytime they want.
+ * 4. Interest rate
+ *      - Individually set up an interest rate for each user based on some global interest rate of
+ *      the protocol at the time the user stakes into the pool.
+ *      - This global interest rate can only decrease over time to incentivise/reward early adopters.
+ *      - Increases token adoption.
+ *      - The individual interest rate is unaffected by the change in the global reward rate, unless
+ *      the user performs any of these actions: a. Stake b. Unstake c. Claim rewards
+ * 5. Upgradeable
+ *
+ * @dev Uses UUPS Upgradeable Proxy Pattern via OpenZeppelin's relevant contracts.
  */
 contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardTransient {
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ TYPE DECLARATIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-    GovernanceToken private _token;
-
-    uint256 private _totalStakedAmount;
-    uint256 private _rewardsPool;
-
-    /**
-     * @dev We start with a default Protocol-level reward
-     * rate of 0.000005% per second
-     * 0.000005% per second = 0.00000005 per second = 5e-8 per second
-     * 5e-8 per second standardized to 18  decimals = 5e10
-     */
-    uint256 private _protocolRewardRatePerSecond = 5e10;
-
-    /**
-     * @dev Stores the individual reward rate of users
-     * A user's reward rate is updated everytime on:
-     * 1. Staking 2. Unstaking 3. Claiming reward
-     */
-    mapping(address user => uint256 rewardRate) private _usersRewardRatePerSecond;
-
-    mapping(address owner => uint256 amount) private _stakedAmount;
-    mapping(address owner => uint256 timestamp) private _lastClaimTime;
-    mapping(address owner => uint256 amount) private _pendingRewards;
-
-    // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTANTS
     // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ IMMUTABLES
-    // ╚═══════════════════════════════════════════════════════════════════════
+    uint256 internal constant DECIMAL_PRECISION = 18;
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ STATE VARIABLES
     // ╚═══════════════════════════════════════════════════════════════════════
-    uint256 private _someVariable;
+    GovernanceToken internal _token;
+
+    // Total amountstaked by all users
+    uint256 internal _totalStakedAmount;
+    // Total rewards pool
+    uint256 internal _rewardsPool;
+
+    /**
+     * @dev Consider, as an example, a Protocol-level reward
+     * rate of 0.000005% per second
+     * 0.000005% per second = 0.00000005 per second = 5e-8 per second
+     * 5e-8 per second standardized to 18  decimals = 5e10
+     */
+    uint256 internal _protocolRewardRatePerSecond;
+
+    /**
+     * @dev Stores the individual reward rate of users
+     * A user's reward rate is initilly set to the current
+     * protocol reward rate.
+     * It is unchanged even when the protocol reward rate is updated,
+     * UNLESS the user performs any of these actions:
+     * 1. Staking 2. Unstaking 3. Claiming reward
+     * In these cases, it is updated via _updatePendingRewards.
+     */
+    mapping(address user => uint256 rewardRate) internal _usersRewardRatePerSecond;
+
+    /**
+     * @dev Mapping storing the amount by each user
+     * 18 Decimal places
+     */
+    mapping(address owner => uint256 amount) internal _stakedAmount;
+
+    /**
+     * @dev Mapping storing, for each user, the timestamp when their
+     * claim time was updated.
+     * Updated everytime (via _updatePendingRewards) on:
+     * 1. Staking 2. Unstaking 3. Claiming reward
+     */
+    mapping(address owner => uint256 timestamp) internal _lastClaimTime;
+
+    /**
+     * @dev Mapping storing, for each user, the reward they had earned
+     * when their claim time was updated.
+     * Updated everytime (via _updatePendingRewards) on:
+     * 1. Staking 2. Unstaking 3. Claiming reward
+     */
+    mapping(address owner => uint256 amount) internal _pendingRewards;
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ EVENTS
@@ -109,10 +141,6 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     error STKPOOL__RewardRateCanOnlyDecrease(uint256 currentRewardRate, uint256 newRewardRate);
 
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ MODIFIERS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTRUCTOR
     // ╚═══════════════════════════════════════════════════════════════════════
     constructor() {
@@ -120,44 +148,37 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ RECEIVER FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ FALLBACK FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
     // ║ EXTERNAL STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
 
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ EXTERNAL VIEW FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ EXTERNAL PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PUBLIC STATE-CHANGING FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-    // --------------------------------------------------------
-    // Stand-in for: our hand-rolled `initialize()` + the
-    // `initializer` modifier from our own Initializable.
-    //
-    // OZ requires explicitly chaining each parent's init function
-    // (Ownable_init, UUPSUpgradeable_init) — this replaces the
-    // manual "owner = owner_;" we wrote by hand, and additionally
-    // wires up Ownable's storage/events correctly.
-    // --------------------------------------------------------
-    function initialize(address owner, address tokenAddress, uint256 initialRewardRatePerSecond) public initializer {
+    /**
+     * @notice Initializes the owner, token address, and the reward rate
+     * @dev Replacement for the constructor
+     * @dev Provided by the "Initializable" contract from OpenZeppelin
+     * @dev Uses the `initializer` modifier
+     *
+     * @param owner The owner of the contract
+     * @param tokenAddress Address of the GovernanceToken contract
+     * @param initialRewardRatePerSecond The initial protolcol level reward rate. Consider,
+     * as an example, a Protocol-level reward rate of 0.000005% per second
+     * 0.000005% per second = 0.00000005 per second = 5e-8 per second
+     * 5e-8 per second standardized to 18  decimals = 5e10
+     */
+    function initialize(address owner, address tokenAddress, uint256 initialRewardRatePerSecond) external initializer {
         __Ownable_init(owner);
         _protocolRewardRatePerSecond = initialRewardRatePerSecond;
         _token = GovernanceToken(tokenAddress);
     }
 
-    function stake(uint256 amountInWei) public {
+    /**
+     * @notice Stake GovernanceToken tokens in the pool
+     * @param amountInWei Amount to stake in 18 decimals
+     */
+    function stake(uint256 amountInWei) external virtual {
+        if (amountInWei == 0) {
+            revert STKPOOL__ZeroNotAllowed();
+        }
+
         address user = msg.sender;
         /**
          * Snapshot the rewards accumulated till now, first.
@@ -172,13 +193,13 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         _token.transferFrom(user, address(this), amountInWei);
     }
 
-    function unstake(uint256 amountInWei) public {
+    /**
+     * @notice Unstake GovernanceToken tokens from the pool
+     * @param amountInWei Amount to unstake in 18 decimals
+     */
+    function unstake(uint256 amountInWei) external virtual {
         if (amountInWei == 0) {
             revert STKPOOL__ZeroNotAllowed();
-        }
-
-        if (amountInWei > _totalStakedAmount) {
-            revert STKPOOL__NotEnoughFundsInStakedPool(amountInWei, _totalStakedAmount);
         }
 
         address user = msg.sender;
@@ -188,21 +209,33 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         }
 
         /**
+         * stakedAmount[user] <= totalStaked by invariant.
+         * So, if the above test does not fail, then this test too
+         * should NOT fail.
+         * Still, lets put this as a DEFENSIVE guard
+         */
+        if (amountInWei > _totalStakedAmount) {
+            revert STKPOOL__NotEnoughFundsInStakedPool(amountInWei, _totalStakedAmount);
+        }
+
+        /**
          * Snapshot the rewards accumulated till now, first.
          * Payout the rewards
          * And THEN, update the staked amount.
          */
         _updatePendingRewards(user);
         uint256 reward = _pendingRewards[user];
-        uint256 rewardsPoolAmount = _getRewardsPoolAmount();
-        uint256 actualRewardPayout = Math.min(reward, rewardsPoolAmount);
+        uint256 rewardsPoolAmount = _rewardsPool;
+        uint256 actualRewardPayout = 0;
 
         if (reward > 0 && rewardsPoolAmount > 0) {
+            actualRewardPayout = Math.min(reward, rewardsPoolAmount);
             _pendingRewards[user] -= actualRewardPayout;
-            _lastClaimTime[user] = block.timestamp;
             _rewardsPool -= actualRewardPayout;
             emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
         }
+
+        _token.transfer(user, amountInWei + actualRewardPayout);
 
         _stakedAmount[user] -= amountInWei;
         _totalStakedAmount -= amountInWei;
@@ -213,10 +246,20 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         emit STKPOOL__Unstaked(user, amountInWei);
     }
 
-    function claimRewards() public {
+    /**
+     * @notice Claim your earned rewards
+     */
+    function claimRewards() external virtual {
         address user = msg.sender;
 
-        uint256 rewardsPoolAmount = _getRewardsPoolAmount();
+        uint256 rewardsPoolAmount = _rewardsPool;
+
+        /**
+         * @dev Intentionally check pool balance BEFORE calling _updatePendingRewards.
+         * An empty pool is a protocol failure, not a user action. The user's individual
+         * reward rate must not be updated — and thereby reduced — due to the protocol's
+         * own insolvency.
+         */
         if (rewardsPoolAmount <= 0) {
             revert STKPOOL__RewardPoolEmpty();
         }
@@ -232,14 +275,17 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         uint256 actualRewardPayout = Math.min(reward, rewardsPoolAmount);
 
         _pendingRewards[user] -= actualRewardPayout;
-        _lastClaimTime[user] = block.timestamp;
         _rewardsPool -= actualRewardPayout;
         emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
 
         _token.transfer(user, actualRewardPayout);
     }
 
-    function fundRewardsPool(uint256 amountInWei) public {
+    /**
+     * @notice Fund the rewards pool
+     * @param amountInWei Amount to stake in 18 decimals
+     */
+    function fundRewardsPool(uint256 amountInWei) external virtual {
         if (amountInWei == 0) {
             revert STKPOOL__ZeroNotAllowed();
         }
@@ -252,11 +298,12 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     /**
      * @notice Updates the global reward rate
      * @dev Reverts if the new rate is higher than the current rate
+     * @dev Uses the `onlyOwner` modifier
      *
      * @param newRewardRate New reward rate
      */
-    function setRewardRate(uint256 newRewardRate) external {
-        if (newRewardRate == _protocolRewardRatePerSecond) {
+    function setRewardRate(uint256 newRewardRate) external virtual onlyOwner {
+        if (newRewardRate >= _protocolRewardRatePerSecond) {
             revert STKPOOL__RewardRateCanOnlyDecrease(_protocolRewardRatePerSecond, newRewardRate);
         }
         uint256 oldRewardRate = _protocolRewardRatePerSecond;
@@ -267,62 +314,86 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PUBLIC VIEW FUNCTIONS
+    // ║ EXTERNAL VIEW FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
-    function getPendingReward(address user) public view returns (uint256) {
+
+    /**
+     * @notice Get the rewards user has earned since last claim/stake/unstake
+     * @dev Wrapper around the internal (and virtual) `_getPendingReward` function
+     *
+     * @param user The user-address for which the query is being made
+     * @return The rewards earned
+     */
+    function getPendingReward(address user) external view returns (uint256) {
         return _getPendingReward(user);
     }
 
-    function getRewardsPoolAmount() public view returns (uint256) {
-        return _getRewardsPoolAmount();
+    /**
+     * @notice Get the total amount available in the rewards pool
+     * @return The total amount available in the rewards pool
+     */
+    function getRewardsPoolAmount() external view virtual returns (uint256) {
+        return _rewardsPool;
     }
 
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PUBLIC PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
+    /**
+     * @notice Gets the global reward rate
+     * @return global reward rate. In 18 decimals
+     */
+    function getProtocolRewardRate() external view virtual returns (uint256) {
+        return _protocolRewardRatePerSecond;
+    }
+
+    /**
+     * @notice Gets the time a user's reward rate was last updated
+     * @param user The user whose reward rate updation time is sought
+     * @return Last updation time
+     */
+    function getUserRewardRateLastUpdationTime(address user) external view virtual returns (uint256) {
+        return _lastClaimTime[user];
+    }
+
+    /**
+     * @notice Gets the user info (staked amount, rewards, last claim time, and the reward rate)
+     * @param user The user in question
+     * @return A tuple containing the required values
+     */
+    function getUserInfo(address user) external view virtual returns (uint256, uint256, uint256, uint256) {
+        return (_stakedAmount[user], _getPendingReward(user), _lastClaimTime[user], _usersRewardRatePerSecond[user]);
+    }
+
+    /**
+     * @notice Gets the pool info (stotal taked amount, rewards pool, and the protocol reward rate)
+     * @return A tuple containing the required values
+     */
+    function getPoolInfo() external view virtual returns (uint256, uint256, uint256) {
+        return (_totalStakedAmount, _rewardsPool, _protocolRewardRatePerSecond);
+    }
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ INTERNAL STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
 
-    // UUPSUpgradeable declares this as a pure virtual function
-    // with NO default implementation — OZ deliberately forces
-    // you to write this override yourself, for the same reason
-    // we had to write it by hand: forgetting access control here
-    // is a critical, contract-bricking vulnerability, and OZ
-    // refuses to guess a "safe default" on your behalf.
+    /**
+     * @notice Checks if the user is allowed to upgrade to a newer contract
+     * @dev UUPSUpgradeable declares this as a pure virtual function with
+     * NO default implementation. Since forgetting access control here is a
+     * critical, contract-bricking vulnerability, OZ refuses to guess a
+     * "safe default" on our behalf.
+     * So, we are forced to write it ourself
+     *
+     * @dev Uses the `onlyOwner` modifier
+     *
+     * @param newImplementation Address of the new impleentation to upgrade to
+     */
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ INTERNAL VIEW FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-    function _getPendingReward(address user) internal view returns (uint256) {
-        // _pendingRewards[user] holds already-settled amount
-        // livePending is the unsettled real-time portion
-        uint256 rewardAlreadyCalculated = _pendingRewards[user];
-        uint256 rewardNotYetCalculated =
-            (block.timestamp - _lastClaimTime[user]) * _stakedAmount[user] * _usersRewardRatePerSecond[user];
-        return rewardAlreadyCalculated + rewardNotYetCalculated;
-    }
-
-    function _getRewardsPoolAmount() internal view returns (uint256) {
-        return _rewardsPool;
-    }
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ INTERNAL PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE STATE-CHANGING FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
-    function _updatePendingRewards(address user) private {
-        // TODO: Do we need to worry about _lastClaimTime[user]?
-        // What if this has not been set ever? In this case, it
-        // would be zero, and consequently block.timestamp - _lastClaimTime[user]
-        // would be a huge number
-        _pendingRewards[user] =
-            (block.timestamp - _lastClaimTime[user]) * _stakedAmount[user] * _usersRewardRatePerSecond[user];
+    /**
+     * @notice Updates the pending rewards user has earned since last update
+     * @param user The user in question
+     */
+    function _updatePendingRewards(address user) internal {
+        _pendingRewards[user] += _calculateUserAccruedRewardSinceLastUpdate(user);
         _lastClaimTime[user] = block.timestamp;
 
         // Update the user's reward rate to that of the protocol
@@ -330,10 +401,43 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE VIEW FUNCTIONS
+    // ║ INTERNAL VIEW FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
 
-    // ╔═══════════════════════════════════════════════════════════════════════
-    // ║ PRIVATE PURE FUNCTIONS
-    // ╚═══════════════════════════════════════════════════════════════════════
+    /**
+     * @notice Calculates reward accured by a user since the last time his
+     * reward rate was updated
+     * @dev Simple reward formula: Reward = Principal * Rate * Time
+     *
+     * @param user The user in question
+     * @return The reward amount accured
+     */
+    function _calculateUserAccruedRewardSinceLastUpdate(address user) internal view virtual returns (uint256) {
+        uint256 lastUpdationTime = _lastClaimTime[user];
+        if (lastUpdationTime == 0) {
+            return 0;
+        }
+
+        // Since our reward rate is per second, timeElapsed should be in seconds
+        uint256 timeElapsed = block.timestamp - lastUpdationTime;
+        // Adjusting for DECIMAL_PRECISION decimals
+        return (_stakedAmount[user] * _usersRewardRatePerSecond[user] * timeElapsed) / 10 ** DECIMAL_PRECISION;
+    }
+
+    /**
+     * @notice Gets the total rewards user has earned since last claim
+     * @dev Total rewards = settled rewards + unsettled rewards
+     * Settled rewards = Marked in _pendingRewards
+     * Unsettled rewards = Rewards earned since _pendingRewards was last updated
+     *
+     * @param user The user in question
+     * @return The reward amount accured
+     */
+    function _getPendingReward(address user) internal view virtual returns (uint256) {
+        // _pendingRewards[user] holds already-settled amount
+        // rewardNotYetCalculated is the unsettled real-time portion
+        uint256 rewardAlreadyCalculated = _pendingRewards[user];
+        uint256 rewardNotYetCalculated = _calculateUserAccruedRewardSinceLastUpdate(user);
+        return rewardAlreadyCalculated + rewardNotYetCalculated;
+    }
 }
