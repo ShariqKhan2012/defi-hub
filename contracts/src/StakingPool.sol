@@ -143,6 +143,7 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTRUCTOR
     // ╚═══════════════════════════════════════════════════════════════════════
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
@@ -168,149 +169,6 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         __Ownable_init(owner);
         _protocolRewardRatePerSecond = initialRewardRatePerSecond;
         _token = GovernanceToken(tokenAddress);
-    }
-
-    /**
-     * @notice Stake GovernanceToken tokens in the pool
-     * @param amountInWei Amount to stake in 18 decimals
-     */
-    function stake(uint256 amountInWei) external virtual {
-        if (amountInWei == 0) {
-            revert STKPOOL__ZeroNotAllowed();
-        }
-
-        address user = msg.sender;
-        /**
-         * Snapshot the rewards accumulated till now, first.
-         * And then, update the staked amount.
-         */
-        _updatePendingRewards(user);
-        _stakedAmount[user] += amountInWei;
-        _totalStakedAmount += amountInWei;
-
-        emit STKPOOL__Staked(user, amountInWei);
-
-        _token.transferFrom(user, address(this), amountInWei);
-    }
-
-    /**
-     * @notice Unstake GovernanceToken tokens from the pool
-     * @param amountInWei Amount to unstake in 18 decimals
-     */
-    function unstake(uint256 amountInWei) external virtual {
-        if (amountInWei == 0) {
-            revert STKPOOL__ZeroNotAllowed();
-        }
-
-        address user = msg.sender;
-        // Ensure the user is not trying to unstake more than they have
-        if (amountInWei > _stakedAmount[user]) {
-            revert STKPOOL__CantUnstakeMoreThanTheStakedAmount(amountInWei, _stakedAmount[user]);
-        }
-
-        /**
-         * stakedAmount[user] <= totalStaked by invariant.
-         * So, if the above test does not fail, then this test too
-         * should NOT fail.
-         * Still, lets put this as a DEFENSIVE guard
-         */
-        if (amountInWei > _totalStakedAmount) {
-            revert STKPOOL__NotEnoughFundsInStakedPool(amountInWei, _totalStakedAmount);
-        }
-
-        /**
-         * Snapshot the rewards accumulated till now, first.
-         * Payout the rewards
-         * And THEN, update the staked amount.
-         */
-        _updatePendingRewards(user);
-        uint256 reward = _pendingRewards[user];
-        uint256 rewardsPoolAmount = _rewardsPool;
-        uint256 actualRewardPayout = 0;
-
-        if (reward > 0 && rewardsPoolAmount > 0) {
-            actualRewardPayout = Math.min(reward, rewardsPoolAmount);
-            _pendingRewards[user] -= actualRewardPayout;
-            _rewardsPool -= actualRewardPayout;
-            emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
-        }
-
-        _token.transfer(user, amountInWei + actualRewardPayout);
-
-        _stakedAmount[user] -= amountInWei;
-        _totalStakedAmount -= amountInWei;
-
-        // Combine the transfer of reward and unstaked amounts in a single txn to save gas
-        _token.transfer(user, amountInWei + actualRewardPayout);
-
-        emit STKPOOL__Unstaked(user, amountInWei);
-    }
-
-    /**
-     * @notice Claim your earned rewards
-     */
-    function claimRewards() external virtual {
-        address user = msg.sender;
-
-        uint256 rewardsPoolAmount = _rewardsPool;
-
-        /**
-         * @dev Intentionally check pool balance BEFORE calling _updatePendingRewards.
-         * An empty pool is a protocol failure, not a user action. The user's individual
-         * reward rate must not be updated — and thereby reduced — due to the protocol's
-         * own insolvency.
-         */
-        if (rewardsPoolAmount <= 0) {
-            revert STKPOOL__RewardPoolEmpty();
-        }
-
-        _updatePendingRewards(user);
-        uint256 reward = _pendingRewards[user];
-        //
-        if (reward <= 0) {
-            revert STKPOOL__NoRewardToClaim();
-        }
-
-        // User has earned some reward, and the pool is also not empty. Let's proceed
-        uint256 actualRewardPayout = Math.min(reward, rewardsPoolAmount);
-
-        _pendingRewards[user] -= actualRewardPayout;
-        _rewardsPool -= actualRewardPayout;
-        emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
-
-        _token.transfer(user, actualRewardPayout);
-    }
-
-    /**
-     * @notice Fund the rewards pool
-     * @param amountInWei Amount to stake in 18 decimals
-     */
-    function fundRewardsPool(uint256 amountInWei) external virtual {
-        if (amountInWei == 0) {
-            revert STKPOOL__ZeroNotAllowed();
-        }
-        _rewardsPool += amountInWei;
-        emit STKPOOL__RewardPoolFunded(msg.sender, amountInWei);
-
-        _token.transferFrom(msg.sender, address(this), amountInWei);
-    }
-
-    /**
-     * @notice Updates the global reward rate
-     * @dev Reverts if the new rate is higher than the current rate
-     * @dev Uses the `onlyOwner` modifier
-     *
-     * @param newRewardRate New reward rate
-     */
-    function setRewardRate(uint256 newRewardRate) external virtual onlyOwner {
-        if (newRewardRate >= _protocolRewardRatePerSecond) {
-            revert STKPOOL__RewardRateCanOnlyDecrease(_protocolRewardRatePerSecond, newRewardRate);
-        }
-        uint256 oldRewardRate = _protocolRewardRatePerSecond;
-        _protocolRewardRatePerSecond = newRewardRate;
-
-        // Log the updation
-        emit STKPOOL__RewardRateUpdated(oldRewardRate, newRewardRate);
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
@@ -368,6 +226,152 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
      */
     function getPoolInfo() external view virtual returns (uint256, uint256, uint256) {
         return (_totalStakedAmount, _rewardsPool, _protocolRewardRatePerSecond);
+    }
+
+    // ╔═══════════════════════════════════════════════════════════════════════
+    // ║ PUBLIC STATE-CHANGING FUNCTIONS
+    // ╚═══════════════════════════════════════════════════════════════════════
+        /**
+     * @notice Stake GovernanceToken tokens in the pool
+     * @param amountInWei Amount to stake in 18 decimals
+     */
+    function stake(uint256 amountInWei) public virtual {
+        if (amountInWei == 0) {
+            revert STKPOOL__ZeroNotAllowed();
+        }
+
+        address user = msg.sender;
+        /**
+         * Snapshot the rewards accumulated till now, first.
+         * And then, update the staked amount.
+         */
+        _updatePendingRewards(user);
+        _stakedAmount[user] += amountInWei;
+        _totalStakedAmount += amountInWei;
+
+        emit STKPOOL__Staked(user, amountInWei);
+
+        _token.transferFrom(user, address(this), amountInWei);
+    }
+
+    /**
+     * @notice Unstake GovernanceToken tokens from the pool
+     * @param amountInWei Amount to unstake in 18 decimals
+     */
+    function unstake(uint256 amountInWei) public virtual {
+        if (amountInWei == 0) {
+            revert STKPOOL__ZeroNotAllowed();
+        }
+
+        address user = msg.sender;
+        // Ensure the user is not trying to unstake more than they have
+        if (amountInWei > _stakedAmount[user]) {
+            revert STKPOOL__CantUnstakeMoreThanTheStakedAmount(amountInWei, _stakedAmount[user]);
+        }
+
+        /**
+         * stakedAmount[user] <= totalStaked by invariant.
+         * So, if the above test does not fail, then this test too
+         * should NOT fail.
+         * Still, lets put this as a DEFENSIVE guard
+         */
+        if (amountInWei > _totalStakedAmount) {
+            revert STKPOOL__NotEnoughFundsInStakedPool(amountInWei, _totalStakedAmount);
+        }
+
+        /**
+         * Snapshot the rewards accumulated till now, first.
+         * Payout the rewards
+         * And THEN, update the staked amount.
+         */
+        _updatePendingRewards(user);
+        uint256 reward = _pendingRewards[user];
+        uint256 rewardsPoolAmount = _rewardsPool;
+        uint256 actualRewardPayout = 0;
+
+        if (reward > 0 && rewardsPoolAmount > 0) {
+            actualRewardPayout = Math.min(reward, rewardsPoolAmount);
+            _pendingRewards[user] -= actualRewardPayout;
+            _rewardsPool -= actualRewardPayout;
+            emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
+        }
+
+        _token.transfer(user, amountInWei + actualRewardPayout);
+
+        _stakedAmount[user] -= amountInWei;
+        _totalStakedAmount -= amountInWei;
+
+        // Combine the transfer of reward and unstaked amounts in a single txn to save gas
+        _token.transfer(user, amountInWei + actualRewardPayout);
+
+        emit STKPOOL__Unstaked(user, amountInWei);
+    }
+
+    /**
+     * @notice Claim your earned rewards
+     */
+    function claimRewards() public virtual {
+        address user = msg.sender;
+
+        uint256 rewardsPoolAmount = _rewardsPool;
+
+        /**
+         * @dev Intentionally check pool balance BEFORE calling _updatePendingRewards.
+         * An empty pool is a protocol failure, not a user action. The user's individual
+         * reward rate must not be updated — and thereby reduced — due to the protocol's
+         * own insolvency.
+         */
+        if (rewardsPoolAmount <= 0) {
+            revert STKPOOL__RewardPoolEmpty();
+        }
+
+        _updatePendingRewards(user);
+        uint256 reward = _pendingRewards[user];
+        //
+        if (reward <= 0) {
+            revert STKPOOL__NoRewardToClaim();
+        }
+
+        // User has earned some reward, and the pool is also not empty. Let's proceed
+        uint256 actualRewardPayout = Math.min(reward, rewardsPoolAmount);
+
+        _pendingRewards[user] -= actualRewardPayout;
+        _rewardsPool -= actualRewardPayout;
+        emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
+
+        _token.transfer(user, actualRewardPayout);
+    }
+
+    /**
+     * @notice Fund the rewards pool
+     * @param amountInWei Amount to stake in 18 decimals
+     */
+    function fundRewardsPool(uint256 amountInWei) public virtual {
+        if (amountInWei == 0) {
+            revert STKPOOL__ZeroNotAllowed();
+        }
+        _rewardsPool += amountInWei;
+        emit STKPOOL__RewardPoolFunded(msg.sender, amountInWei);
+
+        _token.transferFrom(msg.sender, address(this), amountInWei);
+    }
+
+    /**
+     * @notice Updates the global reward rate
+     * @dev Reverts if the new rate is higher than the current rate
+     * @dev Uses the `onlyOwner` modifier
+     *
+     * @param newRewardRate New reward rate
+     */
+    function setRewardRate(uint256 newRewardRate) public virtual onlyOwner {
+        if (newRewardRate >= _protocolRewardRatePerSecond) {
+            revert STKPOOL__RewardRateCanOnlyDecrease(_protocolRewardRatePerSecond, newRewardRate);
+        }
+        uint256 oldRewardRate = _protocolRewardRatePerSecond;
+        _protocolRewardRatePerSecond = newRewardRate;
+
+        // Log the updation
+        emit STKPOOL__RewardRateUpdated(oldRewardRate, newRewardRate);
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════

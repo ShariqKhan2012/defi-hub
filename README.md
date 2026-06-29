@@ -60,3 +60,57 @@ npx create-next-app@latest frontend
 cd frontend
 npm install wagmi@^2.9.0 viem @tanstack/react-query
 npm install @rainbow-me/rainbowkit
+
+## Running the deployer script:
+
+```bash
+forge script script/Deploy.s.sol \ --rpc-url <RPC_URL> \
+ --broadcast \
+ --verify \ # optional: verifies on Etherscan
+--sender <YOUR_ADDRESS> --ffi
+```
+
+OR
+
+```bash
+forge script script/Deploy.s.sol --rpc-url <rpc_url> --account <ACCOUNT_NAME> --broadcast --ffi
+```
+
+## Running the test:
+
+Test `GovernanceToken`
+
+```bash
+forge test test/GovernanceToken.t.sol
+```
+
+Test `test/StakingPool.t.sol`
+
+```bash
+forge test test/StakingPool.t.sol
+# with coverage
+forge coverage test/StakingPool.t.sol
+```
+
+Test `StakingPoolValidated`
+Uses `Upgrades` — requires `--ffi`
+
+```bash
+forge test test/StakingPoolValidated.t.sol --ffi
+```
+
+## Upgrading to StakingPoolV2
+
+```bash
+forge script script/Upgrade.s.sol \
+ --rpc-url <RPC_URL> \
+ --broadcast \
+ --sender <OWNER_ADDRESS> \
+ --ffi
+```
+
+OR
+
+```bash
+forge script script/Upgrade.s.sol --rpc-url <rpc_url> --account <ACCOUNT_NAME> --broadcast --ffi
+```
