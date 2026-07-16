@@ -15,7 +15,8 @@ contract StakingPoolTest is Test {
     StakingPool internal pool;   // typed handle on the proxy
     address internal proxy;
 
-    address internal owner = makeAddr("owner");
+    // owner = address(this): initialize() sets owner to msg.sender (the test contract)
+    address internal owner = address(this);
     address internal alice = makeAddr("alice");
 
     function setUp() public {
@@ -24,12 +25,13 @@ contract StakingPoolTest is Test {
 
         // 2. Deploy StakingPool implementation, then wrap in a proxy
         //    UnsafeUpgrades requires us to deploy the implementation first
+        //    initialize() sets owner = msg.sender = address(this) (this test contract)
         StakingPool impl = new StakingPool();
         proxy = UnsafeUpgrades.deployUUPSProxy(
             address(impl),
             abi.encodeCall(
                 StakingPool.initialize,
-                (owner, address(token), INITIAL_REWARD_RATE)
+                (address(token), INITIAL_REWARD_RATE)
             )
         );
         pool = StakingPool(proxy);
@@ -39,12 +41,10 @@ contract StakingPoolTest is Test {
         vm.prank(alice);
         token.approve(address(pool), type(uint256).max);
 
-        // 4. Fund the rewards pool (as owner)
-        deal(address(token), owner, FUND_AMOUNT);
-        vm.startPrank(owner);
+        // 4. Fund the rewards pool (as owner = address(this), no prank needed)
+        deal(address(token), address(this), FUND_AMOUNT);
         token.approve(address(pool), type(uint256).max);
         pool.fundRewardsPool(FUND_AMOUNT);
-        vm.stopPrank();
     }
 
     // ── Initialization ───────────────────────────────────────────────────
@@ -137,7 +137,7 @@ contract StakingPoolTest is Test {
     }
 
     function test_SetRewardRate_RevertsIfRateIncreases() public {
-        vm.prank(owner);
+        // owner = address(this), so call directly — no prank needed
         vm.expectRevert(
             abi.encodeWithSelector(
                 StakingPool.STKPOOL__RewardRateCanOnlyDecrease.selector,

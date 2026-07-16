@@ -89,8 +89,16 @@ contract StakingPoolV2 is StakingPool {
     }
 
     /**
+     * @notice Returns the current per-user stake limit
+     * @return The max stake limit in 18-decimal precision
+     */
+    function getMaxStakeLimit() external view virtual returns (uint256) {
+        return _maxStakeLimit;
+    }
+
+    /**
      * @notice Changes the stake limit
-     * @param newLimitInWei New Stke Limit, in 18-decimal precision 
+     * @param newLimitInWei New Stke Limit, in 18-decimal precision
      */
     function setStakeLimit(uint256 newLimitInWei) public virtual onlyOwner{
         if(newLimitInWei == 0) {

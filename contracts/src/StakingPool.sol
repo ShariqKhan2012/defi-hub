@@ -157,16 +157,19 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
      * @dev Replacement for the constructor
      * @dev Provided by the "Initializable" contract from OpenZeppelin
      * @dev Uses the `initializer` modifier
+     * @dev Owner is set to msg.sender (the proxy deployer) so that broadcast scripts
+     *      and tests both get the correct owner without needing to pass it as calldata.
+     *      Passing the owner as a parameter would bake the script-simulation address
+     *      (Foundry's DEFAULT_SENDER) into the calldata, setting the wrong owner on-chain.
      *
-     * @param owner The owner of the contract
      * @param tokenAddress Address of the GovernanceToken contract
      * @param initialRewardRatePerSecond The initial protolcol level reward rate. Consider,
      * as an example, a Protocol-level reward rate of 0.000005% per second
      * 0.000005% per second = 0.00000005 per second = 5e-8 per second
      * 5e-8 per second standardized to 18  decimals = 5e10
      */
-    function initialize(address owner, address tokenAddress, uint256 initialRewardRatePerSecond) external initializer {
-        __Ownable_init(owner);
+    function initialize(address tokenAddress, uint256 initialRewardRatePerSecond) external initializer {
+        __Ownable_init(msg.sender);
         _protocolRewardRatePerSecond = initialRewardRatePerSecond;
         _token = GovernanceToken(tokenAddress);
     }

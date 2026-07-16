@@ -15,18 +15,20 @@ contract StakingPoolValidatedTest is Test {
     StakingPool internal pool;
     address internal proxy;
 
-    address internal owner = makeAddr("owner");
+    // owner = address(this): initialize() sets owner to msg.sender (the test contract)
+    address internal owner = address(this);
     address internal alice = makeAddr("alice");
 
   function setUp() public {
     token = new GovernanceToken();
 
     // Upgrades.deployUUPSProxy validates upgrade safety before deploying
+    // initialize() sets owner = msg.sender = address(this) (this test contract)
     proxy = Upgrades.deployUUPSProxy(
       "StakingPool.sol",
       abi.encodeCall(
         StakingPool.initialize,
-        (owner, address(token), INITIAL_REWARD_RATE)
+        (address(token), INITIAL_REWARD_RATE)
       )
     );
     pool = StakingPool(proxy);
@@ -35,11 +37,10 @@ contract StakingPoolValidatedTest is Test {
     vm.prank(alice);
     token.approve(address(pool), type(uint256).max);
 
-    deal(address(token), owner, FUND_AMOUNT);
-    vm.startPrank(owner);
+    // owner = address(this), so call directly — no prank needed
+    deal(address(token), address(this), FUND_AMOUNT);
     token.approve(address(pool), type(uint256).max);
     pool.fundRewardsPool(FUND_AMOUNT);
-    vm.stopPrank();
   }
 
   // The validated test suite mirrors the fast suite.

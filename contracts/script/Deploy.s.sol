@@ -12,7 +12,6 @@ contract Deployer is Script {
     uint256 constant INITIAL_REWARD_RATE = 5e10; // 5e-8 per second, 18-decimal precision
 
     function run() external {
-        address deployer = msg.sender;
         vm.startBroadcast();
 
         // 1. Deploy GovernanceToken — plain, non-upgradeable
@@ -25,8 +24,9 @@ contract Deployer is Script {
         //   - deploys the implementation
         //   - deploys an ERC1967 proxy pointing to it
         //   - calls initialize() on the proxy
+        // Owner is set to msg.sender inside initialize (the broadcast EOA at runtime).
         address proxy = Upgrades.deployUUPSProxy(
-            "StakingPool.sol", abi.encodeCall(StakingPool.initialize, (deployer, address(token), INITIAL_REWARD_RATE))
+            "StakingPool.sol", abi.encodeCall(StakingPool.initialize, (address(token), INITIAL_REWARD_RATE))
         );
         console.log("StakingPool proxy deployed at:", proxy);
 

@@ -114,3 +114,16 @@ OR
 ```bash
 forge script script/Upgrade.s.sol --rpc-url <rpc_url> --account <ACCOUNT_NAME> --broadcast --ffi
 ```
+
+# Run inside contracts/
+
+# 1. Upgrade to V2 (fixes getMaxStakeLimit revert)
+
+forge script script/Upgrade.s.sol --account shariq-foundry-dev --broadcast --ffi --rpc-url 127.0.0.1:8545
+
+# 2. Fund rewards pool so claims work (owner account)
+
+cast send 0x9a676e781a523b5d0c0e43731313a708cb607508 \
+ "fundRewardsPool(uint256)" 1000000000000000000000 \
+ --account shariq-foundry-dev \
+ --rpc-url http://127.0.0.1:8545
