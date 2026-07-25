@@ -139,6 +139,10 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
     error STKPOOL__RewardPoolEmpty();
     error STKPOOL__NotEnoughFundsInStakedPool(uint256 reward, uint256 stakedPool);
     error STKPOOL__RewardRateCanOnlyDecrease(uint256 currentRewardRate, uint256 newRewardRate);
+    error STKPOOL__RewardTransferFailed(address user, uint256 amountInWei);
+    error STKPOOL__StakeTransferFailed(address user, uint256 amountInWei);
+    error STKPOOL__UnstakeTransferFailed(address user, uint256 amountInWei);
+    error STKPOOL__FundRewardTransferFailed(address funder, uint256 amountInWei);
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTRUCTOR
@@ -254,7 +258,10 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
 
         emit STKPOOL__Staked(user, amountInWei);
 
-        _token.transferFrom(user, address(this), amountInWei);
+        bool success = _token.transferFrom(user, address(this), amountInWei);
+        if (!success) {
+            revert STKPOOL__StakeTransferFailed(user, amountInWei);
+        }
     }
 
     /**
@@ -299,13 +306,14 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
             emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
         }
 
-        _token.transfer(user, amountInWei + actualRewardPayout);
-
         _stakedAmount[user] -= amountInWei;
         _totalStakedAmount -= amountInWei;
 
-        // Combine the transfer of reward and unstaked amounts in a single txn to save gas
-        _token.transfer(user, amountInWei + actualRewardPayout);
+        // Principal + any reward paid out in a single transfer
+        bool success = _token.transfer(user, amountInWei + actualRewardPayout);
+        if (!success) {
+            revert STKPOOL__UnstakeTransferFailed(user, amountInWei + actualRewardPayout);
+        }
 
         emit STKPOOL__Unstaked(user, amountInWei);
     }
@@ -342,7 +350,10 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         _rewardsPool -= actualRewardPayout;
         emit STKPOOL__RewardPaid(user, actualRewardPayout, reward);
 
-        _token.transfer(user, actualRewardPayout);
+        bool success =_token.transfer(user, actualRewardPayout);
+        if (!success) {
+            revert STKPOOL__RewardTransferFailed(user, actualRewardPayout);
+        }
     }
 
     /**
@@ -356,7 +367,10 @@ contract StakingPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Reen
         _rewardsPool += amountInWei;
         emit STKPOOL__RewardPoolFunded(msg.sender, amountInWei);
 
-        _token.transferFrom(msg.sender, address(this), amountInWei);
+        bool success = _token.transferFrom(msg.sender, address(this), amountInWei);
+        if (!success) {
+            revert STKPOOL__FundRewardTransferFailed(msg.sender, amountInWei);
+        }
     }
 
     /**

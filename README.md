@@ -85,18 +85,10 @@ forge test test/GovernanceToken.t.sol
 ```
 
 Test `test/StakingPool.t.sol`
-
-```bash
-forge test test/StakingPool.t.sol
-# with coverage
-forge coverage test/StakingPool.t.sol
-```
-
-Test `StakingPoolValidated`
 Uses `Upgrades` — requires `--ffi`
 
 ```bash
-forge test test/StakingPoolValidated.t.sol --ffi
+forge test test/StakingPool.t.sol --ffi
 ```
 
 ## Upgrading to StakingPoolV2
