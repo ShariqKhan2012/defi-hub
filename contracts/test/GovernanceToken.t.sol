@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {GovernanceToken} from "../src/GovernanceToken.sol";
-import {GovernanceTokenDeployer} from "../script/GovernanceTokenDeployer.s.sol";
+//import {GovernanceTokenDeployer} from "../script/GovernanceTokenDeployer.s.sol";
 
 contract GovernanceTokenTest is Test {
     uint256 public constant DECIMAL_PRECISION = 18;
@@ -13,6 +13,7 @@ contract GovernanceTokenTest is Test {
     uint256 public constant FAUCET_CLAIM_AMOUNT_IN_WEI = 3000 * (10 ** DECIMAL_PRECISION); // 3000 GTK
     uint256 public constant TRANSFER_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
     uint256 public constant ALLOWANCE_AMOUNT_IN_WEI = 1000 * (10 ** DECIMAL_PRECISION); // 1000 GTK
+    uint256 constant INITIAL_SUPPLY = 1_000_000 * 10 ** 18;
 
     uint256 constant ALICE_PRIVATE_KEY = 0x1;
     uint256 constant BOB_PRIVATE_KEY = 0x2;
@@ -27,8 +28,10 @@ contract GovernanceTokenTest is Test {
     // ╚═══════════════════════════════════════════════════════════════════════
     function setUp() public {
         DEFAULT_SENDER_ADDRESS = vm.envAddress("ANVIL_DEPLOYER_ACCOUNT");
-        GovernanceTokenDeployer deployer = new GovernanceTokenDeployer();
-        _gtk = deployer.run();
+        //GovernanceTokenDeployer deployer = new GovernanceTokenDeployer();
+        //_gtk = deployer.run();
+        _gtk = new GovernanceToken();
+        _gtk.mint(msg.sender, INITIAL_SUPPLY);
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
@@ -78,11 +81,20 @@ contract GovernanceTokenTest is Test {
      * actually the wallet, not the script contract.
      * Foundry's vm.startBroadcast() makes all subsequent calls appear to come from
      * our wallet, not from the script contract itself.
+     *
+     * `assertEq(owner, msg.sender);` would have made sense if we were using the deployer
+     * script to get the instance of the GovernanceToken contract from inside the `setUp` function,
+     * andthe deployeruses startBroadcast() to deploy the contract. In that case, the owner
+     * would be the wallet, and msg.sender inside the test function would also be the wallet.
+     * But here we are directly deploying the GovernanceToken contract from inside the `setUp` function,
+     * using `_gtk = new GovernanceToken();`
+     * In this case, the owner is the script contract itself, and msg.sender inside the test function, so
+     * we should assert that the owner is equal to address(this), which refers to the current contract
+     * instance (the test contract).
      */
     function testOwnership() public view {
         address owner = _gtk.owner();
-        assertEq(owner, msg.sender);
-        assertEq(owner, DEFAULT_SENDER_ADDRESS);
+        assertEq(owner, address(this));
     }
 
     function testInitialSupply() public view {
@@ -96,7 +108,8 @@ contract GovernanceTokenTest is Test {
     function testNonOwnerCanNotMintTokens() public {
         uint256 initialBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(initialBalanceOfAlice, 0);
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this)));
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        vm.prank(alice);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
         uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(finalBalanceOfAlice, initialBalanceOfAlice);
@@ -109,7 +122,7 @@ contract GovernanceTokenTest is Test {
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
         uint256 finalBalanceOfAlice = _gtk.balanceOf(alice);
         assertEq(finalBalanceOfAlice, MINT_AMOUNT_IN_WEI);
@@ -131,7 +144,7 @@ contract GovernanceTokenTest is Test {
          * Since the mint function can only be called y the owner, and
          * the owner is the wallet, we have to prank the `mint` call
          */
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
     }
 
@@ -210,7 +223,7 @@ contract GovernanceTokenTest is Test {
     function testAutoDelegatesToUserOnMint() public {
         address delegateeOfAliceBeforeMint = _gtk.delegates(alice);
         assertEq(delegateeOfAliceBeforeMint, address(0));
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
         address delegateeOfAliceAfterMint = _gtk.delegates(alice);
         assertEq(delegateeOfAliceAfterMint, alice);
@@ -256,7 +269,7 @@ contract GovernanceTokenTest is Test {
     function testCheckpointIsCreatedOnMinting() public {
         uint256 mintBlock = block.number;
 
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
 
         /**
@@ -282,7 +295,7 @@ contract GovernanceTokenTest is Test {
     }
 
     function testCheckpointUpdatesOnTransfer() public {
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
 
         uint256 snapshotBlock = block.number;
@@ -310,13 +323,13 @@ contract GovernanceTokenTest is Test {
 
     function testPastVotesReflectSnapshotNotCurrentBalance() public {
         uint256 initialBlock = block.number;
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
 
         // Move one block ahead
         uint256 nextBlock = initialBlock + 1;
         vm.roll(nextBlock);
-        vm.prank(DEFAULT_SENDER_ADDRESS);
+        //vm.prank(DEFAULT_SENDER_ADDRESS);
         _gtk.mint(alice, MINT_AMOUNT_IN_WEI);
 
         // Move one block ahead
