@@ -17,7 +17,9 @@ fs_permissions = [
   { access = "read", path = "./images/" },
   { access = "read", path = "./broadcast" },
   { access = "read", path = "./out" },
-  { access = "read", path = "./cache" }
+  { access = "read", path = "./cache" },
+  { access = "read", path = "../frontend/script/merkle" },
+  { access = "read", path = "../frontend/script/merkle/merkleOutput.json" },
 ]
 optimizer = true
 optimizer_runs = 500

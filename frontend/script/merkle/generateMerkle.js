@@ -36,7 +36,11 @@ const root = tree.getRoot().toString("hex");
 
 console.log("Merkle Root:", root);
 
-const output = { root: "0x" + root, claims: {} };
+const totalAmount = Object.values(airdropList)
+  .reduce((sum, amount) => sum + BigInt(amount), 0n)
+  .toString();
+
+const output = { root: "0x" + root, totalAmount, claims: {} };
 
 for (const [address, amount] of Object.entries(airdropList)) {
   const leaf = encodeLeaf(address, amount);

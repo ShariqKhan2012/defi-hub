@@ -8,14 +8,15 @@ import {GovernanceToken} from "../src/GovernanceToken.sol";
 import {StakingPool} from "../src/StakingPool.sol";
 
 contract Deployer is Script {
-    // Tune these as needed
+    uint256 constant INITIAL_SUPPLY = 1_000_000 * 10 ** 18;
     uint256 constant INITIAL_REWARD_RATE = 5e10; // 5e-8 per second, 18-decimal precision
 
     function run() external {
         vm.startBroadcast();
 
-        // 1. Deploy GovernanceToken — plain, non-upgradeable
+        // 1. Deploy GovernanceToken and mint initial supply to deployer
         GovernanceToken token = new GovernanceToken();
+        token.mint(msg.sender, INITIAL_SUPPLY);
         console.log("GovernanceToken deployed at:", address(token));
 
         // 2. Deploy StakingPool as a UUPS proxy

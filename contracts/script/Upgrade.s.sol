@@ -11,10 +11,10 @@ contract Upgrade is Script {
         string memory broadcastJson = vm.readFile(
             "broadcast/Deploy.s.sol/31337/run-latest.json"
         );
-        // GovernanceToken is [0], StakingPool impl is [1], proxy is [2]
+        // GovernanceToken is [0], mint CALL is [1], StakingPool impl is [2], proxy is [3]
         address proxy = vm.parseJsonAddress(
             broadcastJson,
-            ".transactions[2].contractAddress"
+            ".transactions[3].contractAddress"
         );
 
         vm.startBroadcast();
