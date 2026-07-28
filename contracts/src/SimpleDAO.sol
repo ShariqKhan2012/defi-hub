@@ -62,13 +62,14 @@ contract SimpleDAO is Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ ERRORS
     // ╚═══════════════════════════════════════════════════════════════════════
+    error SDAO__VotingPeriodMustBeGreaterThanZero();
     error SDAO__VotingPeriodEnded(uint256 proposalId, uint256 currentBlock, uint256 deadline);
     error SDAO__AlreadyVoted(uint256 proposalId, address voter);
     error SDAO__NoVotingPower(address voterId);
     error SDAO__ProposalDoesNotExist(uint256 proposalId);
     error SDAO__ProposalAlreadyExecuted(uint256 proposalId);
     error SDAO__ProposalDidNotPass(uint256 proposalId);
-    error SDAO__VotingPeriodNotEnded(uint256 proposalId, uint256 currentBlock, uint256 deadline);
+    error SDAO__CanNotExecuteAnActiveProposal(uint256 proposalId, uint256 currentBlock, uint256 deadline);
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ CONSTRUCTOR
@@ -80,7 +81,16 @@ contract SimpleDAO is Ownable {
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ EXTERNAL STATE-CHANGING FUNCTIONS
     // ╚═══════════════════════════════════════════════════════════════════════
-    function createProposal(string memory description, uint256 votingPeriod) external {
+    function createProposal(string memory description, uint256 votingPeriod) external returns (Proposal memory) {
+        if (votingPeriod == 0) {
+            revert SDAO__VotingPeriodMustBeGreaterThanZero();
+        }
+
+        uint256 votingPower = _token.getPastVotes(msg.sender, block.number - 1);
+        if (votingPower == 0) {
+            revert SDAO__NoVotingPower(msg.sender);
+        }
+
         Proposal storage newProposal = _proposals[_proposalCount];
         newProposal.description = description;
         newProposal.snapshotBlock = block.number - 1;
@@ -88,6 +98,7 @@ contract SimpleDAO is Ownable {
         _proposalCount++;
 
         emit SDAO__ProposalCreated(_proposalCount - 1, description, newProposal.deadline);
+        return newProposal;
     }
 
     function vote(uint256 proposalId, bool inSupport) external {
@@ -133,7 +144,7 @@ contract SimpleDAO is Ownable {
 
         // Revert, if proposal is still active (voting period not ended)
         if (state == ProposalState.Active) {
-            revert SDAO__VotingPeriodNotEnded(proposalId, block.number, proposal.deadline);
+            revert SDAO__CanNotExecuteAnActiveProposal(proposalId, block.number, proposal.deadline);
         }
 
         // Revert, if proposal as already been executed
