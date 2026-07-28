@@ -19,7 +19,6 @@ function viemKeccak(buffer) {
 
 const airdropList = JSON.parse(fs.readFileSync("./airdropList.json", "utf-8"));
 
-// ── Input validation ─────────────────────────────────────────
 const seen = new Set();
 for (const [address, amount] of Object.entries(airdropList)) {
   if (!isAddress(address)) throw new Error(`Invalid address: ${address}`);
@@ -27,8 +26,6 @@ for (const [address, amount] of Object.entries(airdropList)) {
   if (seen.has(address.toLowerCase())) throw new Error(`Duplicate address: ${address}`);
   seen.add(address.toLowerCase());
 }
-
-
 
 const leaves = Object.entries(airdropList).map(([address, amount]) => encodeLeaf(address, amount));
 const tree = new MerkleTree(leaves, viemKeccak, { sortPairs: true });
