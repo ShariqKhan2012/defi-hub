@@ -12,11 +12,12 @@ import {GovernanceToken} from "./GovernanceToken.sol";
  * token balance as voting power
  * CORE LOGIC:
  * 1. Voting power = how many GovernanceToken the user holds (uses OpenZeppelin's ERC20Votes extension)
- * 2. Anyone can create a proposal, which has a description and a voting period (in blocks)
+ * 2. Anyone with voting power can create a proposal, which has a description and a voting period (in blocks)
  * 3. Users vote FOR or AGAINST
  * 4. Proposal is Active until and including the deadline block. Voting closes at block.number > deadline.
  * 5. After period ends, the proposal is marked Passed or Failed
  * 6. The owner of the contract can execute the proposal if it has passed (forVotes > againstVotes)
+ * Note that execution is just symbolic here. No actual code runs when a contract is marked as executed
  *
  *
  * KEY RESTRICTION:

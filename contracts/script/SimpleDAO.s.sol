@@ -8,7 +8,8 @@ import {GovernanceToken} from "../src/GovernanceToken.sol";
 
 contract SimpleDAODeployer is Script {
     function run() external {
-        string memory broadcastJson = vm.readFile("broadcast/Deploy.s.sol/31337/run-latest.json");
+        string memory path = string.concat("broadcast/Deploy.s.sol/", vm.toString(block.chainid), "/run-latest.json");
+        string memory broadcastJson = vm.readFile(path);
         // GovernanceToken is [0], mint CALL is [1], StakingPool impl is [2], proxy is [3]
         address tokenAddress = vm.parseJsonAddress(broadcastJson, ".transactions[0].contractAddress");
 

@@ -21,6 +21,7 @@ contract SimpleDAOTest is Test {
     SimpleDAO private _dao;
     address private alice = makeAddr("alice");
     address private bob = makeAddr("bob");
+    address private charlie = makeAddr("charlie");
 
     // ╔═══════════════════════════════════════════════════════════════════════
     // ║ MODIFIERS
@@ -52,6 +53,7 @@ contract SimpleDAOTest is Test {
         // Pre-fund the owner (this contract) and alice with voting power
         _gtk.mint(address(this), HIGHER_VOTING_POWER);
         _gtk.mint(alice, DEFAULT_VOTING_POWER);
+        _gtk.mint(charlie, DEFAULT_VOTING_POWER);
 
         vm.roll(block.number + 1); // Move to next block to ensure snapshotBlock is set correctly
     }
@@ -153,6 +155,17 @@ contract SimpleDAOTest is Test {
         vm.expectRevert(abi.encodeWithSelector(SimpleDAO.SDAO__AlreadyVoted.selector, 0, alice));
         vm.prank(alice);
         _dao.vote(0, false);
+    }
+
+    function testTiedVotingResultsInFailedProposal()
+        public
+        withProposal
+        withVoting(alice, true) // Alice votes FOR
+        withVoting(charlie, false) // Charlie votes AGAINST
+        withVotingCompleted
+    {
+        SimpleDAO.ProposalState state = _dao.getProposalState(0);
+        assertEq(uint256(state), uint256(SimpleDAO.ProposalState.Failed));
     }
 
     // ╔═══════════════════════════════════════════════════════════════════════
