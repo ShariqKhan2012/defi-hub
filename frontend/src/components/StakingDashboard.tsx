@@ -1,19 +1,19 @@
 'use client';
 
+import {
+  GOVERNANCE_TOKEN_ABI,
+  GOVERNANCE_TOKEN_ADDRESS,
+  STAKING_POOL_ABI,
+  STAKING_POOL_ADDRESS,
+} from '@/lib/contracts';
 import { useEffect, useState } from 'react';
+import { formatEther, maxUint256, parseEther } from 'viem';
 import {
   useAccount,
   useReadContracts,
-  useWriteContract,
   useWaitForTransactionReceipt,
+  useWriteContract,
 } from 'wagmi';
-import { formatEther, parseEther, maxUint256 } from 'viem';
-import {
-  STAKING_POOL_ADDRESS,
-  GOVERNANCE_TOKEN_ADDRESS,
-  STAKING_POOL_ABI,
-  GOVERNANCE_TOKEN_ABI,
-} from '@/lib/contracts';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -127,7 +127,7 @@ export function StakingDashboard() {
   const { data: poolData, refetch: refetchPool } = useReadContracts({
     contracts: [
       { ...poolContract, functionName: 'getPoolInfo' },
-      { ...poolContract, functionName: 'getMaxStakeLimit' },
+      //{ ...poolContract, functionName: 'getMaxStakeLimit' },
       { ...poolContract, functionName: 'owner' },
     ],
   });
@@ -142,8 +142,8 @@ export function StakingDashboard() {
   });
 
   const poolInfo = poolData?.[0]?.result as readonly [bigint, bigint, bigint] | undefined;
-  const maxStakeLimit = poolData?.[1]?.result as bigint | undefined;
-  const contractOwner = poolData?.[2]?.result as `0x${string}` | undefined;
+  //const maxStakeLimit = poolData?.[1]?.result as bigint | undefined;
+  const contractOwner = poolData?.[1]?.result as `0x${string}` | undefined;
 
   const userInfo = userData?.[0]?.result as readonly [bigint, bigint, bigint, bigint] | undefined;
   const tokenBalance = userData?.[1]?.result as bigint | undefined;
@@ -311,11 +311,11 @@ export function StakingDashboard() {
             <StatCard label="Staked" value={fmt(stakedAmount, 2)} unit="GTK" />
             <StatCard label="Pending Rewards" value={fmt(pendingReward, 6)} unit="GTK" highlight />
             <StatCard label="Your APR" value={fmtAPR(userRate)} />
-            <StatCard
+            {/*<StatCard
               label="Stake Limit (V2)"
               value={fmt(maxStakeLimit, 0)}
               unit="GTK"
-            />
+            />*/}
           </div>
           {isOwner && (
             <p className="mt-2 text-xs text-amber-400">
@@ -336,11 +336,10 @@ export function StakingDashboard() {
                 <button
                   key={tab}
                   onClick={() => handleTabChange(tab)}
-                  className={`px-6 py-3 text-sm font-medium capitalize transition-colors ${
-                    activeTab === tab
+                  className={`px-6 py-3 text-sm font-medium capitalize transition-colors ${activeTab === tab
                       ? 'border-b-2 border-emerald-500 text-emerald-400'
                       : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
+                    }`}
                 >
                   {tab}
                 </button>
@@ -389,11 +388,11 @@ export function StakingDashboard() {
                         MAX
                       </button>
                     </div>
-                    {maxStakeLimit !== undefined && stakeAmountWei !== null && stakeAmountWei > maxStakeLimit && (
+                    {/*maxStakeLimit !== undefined && stakeAmountWei !== null && stakeAmountWei > maxStakeLimit && (
                       <p className="mt-1 text-xs text-red-400">
                         Exceeds stake limit of {fmt(maxStakeLimit, 0)} GTK
                       </p>
-                    )}
+                    )*/}
                   </div>
 
                   {needsApproval ? (

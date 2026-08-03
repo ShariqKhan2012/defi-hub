@@ -1,3 +1,8 @@
+import GovernanceTokenAbi from '../abi/GovernanceToken';
+import MerkleAirdropAbi from '../abi/MerkleAirdrop';
+import SimpleDaoAbi from '../abi/SimpleDAO';
+import StakingPoolAbi from '../abi/StakingPool';
+
 export const GOVERNANCE_TOKEN_ADDRESS =
   (process.env.NEXT_PUBLIC_GOVERNANCE_TOKEN_ADDRESS as `0x${string}`) ??
   '0x0000000000000000000000000000000000000000';
@@ -6,7 +11,21 @@ export const STAKING_POOL_ADDRESS =
   (process.env.NEXT_PUBLIC_STAKING_POOL_ADDRESS as `0x${string}`) ??
   '0x0000000000000000000000000000000000000000';
 
-export const GOVERNANCE_TOKEN_ABI = [
+export const MERKLE_AIRDROP_ADDRESS =
+  (process.env.NEXT_PUBLIC_MERKLE_AIRDROP_ADDRESS as `0x${string}`) ??
+  '0x0000000000000000000000000000000000000000';
+
+export const SIMPLE_DAO_ADDRESS =
+  (process.env.NEXT_PUBLIC_SIMPLEDAO_ADDRESS as `0x${string}`) ??
+  '0x0000000000000000000000000000000000000000';
+
+export const GOVERNANCE_TOKEN_ABI = GovernanceTokenAbi;
+export const STAKING_POOL_ABI = StakingPoolAbi;
+export const MERKLE_AIRDROP_ABI = MerkleAirdropAbi;
+export const SIMPLE_DAO_ABI = SimpleDaoAbi
+
+
+export const GOVERNANCE_TOKEN_ABI_0 = [
   {
     name: 'balanceOf',
     type: 'function',
@@ -50,7 +69,7 @@ export const GOVERNANCE_TOKEN_ABI = [
   },
 ] as const;
 
-export const STAKING_POOL_ABI = [
+export const STAKING_POOL_ABI_0 = [
   // ── View ────────────────────────────────────────────────────────────
   {
     name: 'getPoolInfo',

@@ -21,7 +21,7 @@ contract MerkleAirdropDeployer is Script {
         MerkleAirdrop airdrop = new MerkleAirdrop(tokenAddress, merkleRoot);
         console.log("MerkleAirdrop deployed at:", address(airdrop));
 
-        GovernanceToken(tokenAddress).transfer(address(airdrop), totalAmount);
+        GovernanceToken(tokenAddress).mint(address(airdrop), totalAmount);
         console.log("Funded airdrop with", totalAmount, "GTK (wei)");
 
         vm.stopBroadcast();

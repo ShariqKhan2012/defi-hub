@@ -92,7 +92,7 @@ contract SimpleDAOTest is Test {
     }
 
     function testCreatedProposalHasCorrectProperties() public withProposal {
-        SimpleDAO.Proposal memory newProposal = _dao.getProposal(0);
+        (SimpleDAO.Proposal memory newProposal,) = _dao.getProposal(0);
         assertEq(newProposal.description, DEFAULT_DESCRIPTION);
         assertEq(newProposal.snapshotBlock, block.number - 1);
         assertEq(newProposal.deadline, block.number + DEFAULT_VOTING_PERIOD);
@@ -143,7 +143,7 @@ contract SimpleDAOTest is Test {
         vm.prank(alice);
         _dao.vote(0, true);
 
-        SimpleDAO.Proposal memory proposal = _dao.getProposal(0);
+        (SimpleDAO.Proposal memory proposal,) = _dao.getProposal(0);
         assertEq(proposal.forVotes, DEFAULT_VOTING_POWER);
         assertEq(proposal.againstVotes, 0);
     }
@@ -199,9 +199,10 @@ contract SimpleDAOTest is Test {
     }
 
     function testCanNotExecuteAnActiveProposal() public withProposal {
+        (SimpleDAO.Proposal memory proposal,) = _dao.getProposal(0);
         vm.expectRevert(
             abi.encodeWithSelector(
-                SimpleDAO.SDAO__CanNotExecuteAnActiveProposal.selector, 0, block.number, _dao.getProposal(0).deadline
+                SimpleDAO.SDAO__CanNotExecuteAnActiveProposal.selector, 0, block.number, proposal.deadline
             )
         );
         _dao.executeProposal(0);
@@ -216,7 +217,7 @@ contract SimpleDAOTest is Test {
     {
         _dao.executeProposal(0);
 
-        SimpleDAO.Proposal memory proposal = _dao.getProposal(0);
+        (SimpleDAO.Proposal memory proposal,) = _dao.getProposal(0);
         assertEq(proposal.executed, true);
     }
 
@@ -245,7 +246,7 @@ contract SimpleDAOTest is Test {
     {
         _dao.executeProposal(0);
 
-        SimpleDAO.Proposal memory proposal = _dao.getProposal(0);
+        (SimpleDAO.Proposal memory proposal,) = _dao.getProposal(0);
         assertEq(proposal.executed, true);
 
         vm.expectRevert(abi.encodeWithSelector(SimpleDAO.SDAO__ProposalAlreadyExecuted.selector, 0));

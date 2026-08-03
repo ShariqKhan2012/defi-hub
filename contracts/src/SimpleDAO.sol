@@ -170,11 +170,12 @@ contract SimpleDAO is Ownable {
         return _getProposalState(proposalId);
     }
 
-    function getProposal(uint256 proposalId) external view returns (Proposal memory) {
+    function getProposal(uint256 proposalId) external view returns (Proposal memory, ProposalState) {
         if (proposalId >= _proposalCount) {
             revert SDAO__ProposalDoesNotExist(proposalId);
         }
-        return _proposals[proposalId];
+
+        return (_proposals[proposalId], _getProposalState(proposalId));
     }
 
     function getProposalCount() external view returns (uint256) {

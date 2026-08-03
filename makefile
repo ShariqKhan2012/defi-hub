@@ -1,7 +1,10 @@
-.PHONY: install install-frontend install-contracts build clean test dev
+.PHONY: install install-frontend install-contracts build clean test dev sync-abis
 
 build:
 	cd contracts && forge build
+
+sync-abis:
+	node scripts/sync-abis.js
 
 clean:
 	cd contracts && forge clean

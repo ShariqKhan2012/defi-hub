@@ -14,9 +14,34 @@ contract Deployer is Script {
     function run() external {
         vm.startBroadcast();
 
+        /*
+         * Either extract the deployer, and use that or explicitly specify
+         * the deployer in `vm.startBroadcast()` by using:
+         * `vm.startBroadcast(<DEPLOYER_ACCOUNT>)`
+         * Or use --sender flag while running the deployer script
+         *
+         * This is because unless explicitly specified, vm.startBroadcast() uses
+         * the DEFAULT_SENDER account hard-coded in foundry, which has a strange
+         * effect that Foundry signs with the private key of deployer (--account flag),
+         * but the script itself sees msg.sender as DEFAULT_SENDER
+         */
+        (, address deployer,) = vm.readCallers();
+
         // 1. Deploy GovernanceToken and mint initial supply to deployer
         GovernanceToken token = new GovernanceToken();
-        token.mint(msg.sender, INITIAL_SUPPLY);
+
+        /**
+         * Here msg.sender != deployer.
+         * Interesting inside `run` msg.sender = DEFAULT_SENDER, but inside the
+         * GovernanceToken constructor, msg.sender = the --account address
+         * Since, we want our --account to be minted the INITIAL_SUPPLY,
+         * we should use <deployer> variable instead of msg.sende (which, as stated
+         * above, is DEFAULT_SENDER, inside the `run` function, unless we explicityly use
+         * `vm.startBroadcast(<DEPPLOYER>)` or --sender flag while running the deployer script
+         * )
+         */
+        //token.mint(msg.sender, INITIAL_SUPPLY);
+        token.mint(deployer, INITIAL_SUPPLY);
         console.log("GovernanceToken deployed at:", address(token));
 
         // 2. Deploy StakingPool as a UUPS proxy
