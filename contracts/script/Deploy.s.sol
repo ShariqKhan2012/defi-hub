@@ -12,6 +12,17 @@ contract Deployer is Script {
     uint256 constant INITIAL_REWARD_RATE = 5e10; // 5e-8 per second, 18-decimal precision
 
     function run() external {
+        /**
+         * Foundry has a bug/quirk where the first deployed contract when added to
+         * MetaMask always shows the symbol as USDC. This prevents the user from
+         * being able to see the actual token details - symbol, balance, and transactions
+         * etc, as they all show up under the USDC symbol
+         * Strangely, this happens only on locally running Anvil chain.
+         * Any subsequently deployed contracts dont suffer from this issue.
+         * So, as a workaround we shall deploy a dummy contract as the first contract if the
+         * chain is Anvil.
+         */
+
         vm.startBroadcast();
 
         /*

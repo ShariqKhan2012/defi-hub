@@ -3,15 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
+import {DevOpsTools} from "foundry-devops/src/DevOpsTools.sol";
 import {SimpleDAO} from "../src/SimpleDAO.sol";
 import {GovernanceToken} from "../src/GovernanceToken.sol";
 
 contract SimpleDAODeployer is Script {
     function run() external {
-        string memory path = string.concat("broadcast/Deploy.s.sol/", vm.toString(block.chainid), "/run-latest.json");
-        string memory broadcastJson = vm.readFile(path);
-        // GovernanceToken is [0], mint CALL is [1], StakingPool impl is [2], proxy is [3]
-        address tokenAddress = vm.parseJsonAddress(broadcastJson, ".transactions[0].contractAddress");
+        address tokenAddress = DevOpsTools.get_most_recent_deployment("GovernanceToken", block.chainid);
 
         vm.startBroadcast();
         SimpleDAO dao = new SimpleDAO(tokenAddress);

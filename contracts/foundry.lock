@@ -5,6 +5,12 @@
   "lib/forge-std": {
     "rev": "c90c02ffa470b46d92ffaab093baeb296300870b"
   },
+  "lib/foundry-devops": {
+    "tag": {
+      "name": "0.4.0",
+      "rev": "efff097a87e70c3d15661c9f2a2daeae0b33d5d5"
+    }
+  },
   "lib/openzeppelin-contracts": {
     "rev": "cd05883078060e0cd8a7bd36636944570dbe1722"
   },
