@@ -1,19 +1,20 @@
 'use client';
 
 import {
-  GOVERNANCE_TOKEN_ADDRESS,
   GOVERNANCE_TOKEN_ABI,
+  GOVERNANCE_TOKEN_ADDRESS,
   SIMPLE_DAO_ABI,
   SIMPLE_DAO_ADDRESS,
 } from '@/lib/contracts';
 import { useEffect, useMemo, useState } from 'react';
-import { formatEther } from 'viem';
+import { BaseError, ContractFunctionRevertedError, decodeErrorResult, formatEther } from 'viem';
 import {
   useAccount,
   useBlockNumber,
   useReadContract,
   useReadContracts,
   useWaitForTransactionReceipt,
+  useWatchContractEvent,
   useWriteContract,
 } from 'wagmi';
 
@@ -31,6 +32,71 @@ type ProposalData = {
 // Mirrors SimpleDAO.ProposalState enum
 const STATE = { Active: 0, Passed: 1, Failed: 2, Executed: 3 } as const;
 type ProposalState = 0 | 1 | 2 | 3;
+
+// ── Error decoding ────────────────────────────────────────────────────────────
+
+const SDAO_ERRORS: Record<string, string> = {
+  SDAO__NoVotingPower: 'No voting power — delegate your GTK tokens first.',
+  SDAO__AlreadyVoted: 'Already voted on this proposal.',
+  SDAO__VotingPeriodEnded: 'Voting period has ended.',
+  SDAO__CanNotExecuteAnActiveProposal: 'Voting still active — wait for the deadline.',
+  SDAO__ProposalAlreadyExecuted: 'Proposal already executed.',
+  SDAO__ProposalDidNotPass: 'Proposal did not pass.',
+  SDAO__ProposalDoesNotExist: 'Proposal does not exist.',
+  SDAO__VotingPeriodMustBeGreaterThanZero: 'Voting period must be > 0 blocks.',
+};
+
+function findRevertHex(err: BaseError): `0x${string}` | undefined {
+  const hexRe = /^0x[\da-fA-F]{8}/;
+  const node = err.walk((e) => {
+    const d = (e as { data?: unknown }).data;
+    // Shape A: data = "0xABCD..." (viem RawContractError / ExecutionRevertedError)
+    if (typeof d === 'string' && hexRe.test(d)) return true;
+    // Shape B: data = { data: "0xABCD..." } (MetaMask nested JSON-RPC error)
+    if (d && typeof d === 'object' && !Array.isArray(d)) {
+      const inner = (d as { data?: unknown }).data;
+      if (typeof inner === 'string' && hexRe.test(inner)) return true;
+    }
+    return false;
+  });
+  if (!node) return undefined;
+  const d = (node as { data?: unknown }).data;
+  if (typeof d === 'string') return d as `0x${string}`;
+  if (d && typeof d === 'object' && !Array.isArray(d)) {
+    const inner = (d as { data?: unknown }).data;
+    if (typeof inner === 'string') return inner as `0x${string}`;
+  }
+  return undefined;
+}
+
+function decodeError(err: Error | null | undefined): string | null {
+  if (!err) return null;
+  if (!(err instanceof BaseError)) return err.message;
+
+  // Path 1: viem already decoded the error (simulateContract / direct viem call)
+  const revert = err.walk(e => e instanceof ContractFunctionRevertedError);
+  if (revert instanceof ContractFunctionRevertedError) {
+    const name = revert.data?.errorName;
+    const reason = revert.reason;
+    if (name) return SDAO_ERRORS[name] ?? name;
+    if (reason) return reason;
+  }
+
+  // Path 2: wallet-layer error — raw hex in cause chain, decode manually
+  const rawHex = findRevertHex(err);
+  if (rawHex) {
+    try {
+      const { errorName } = decodeErrorResult({ abi: SIMPLE_DAO_ABI, data: rawHex });
+      return SDAO_ERRORS[errorName] ?? errorName;
+    } catch { /* unknown selector — fall through */ }
+  }
+
+  //console.log('[decodeError] chain:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+  console.log('[decodeError] chain 1: => ', err);
+  console.log('[decodeError] chain 2: => ', Object.getOwnPropertyNames(err));
+
+  return err.shortMessage;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,9 +119,9 @@ function blocksToTime(blocks: number): string {
 function StateBadge({ state }: { state: ProposalState | undefined }) {
   if (state === undefined) return null;
   const cfg: Record<number, { label: string; cls: string }> = {
-    0: { label: 'Active',    cls: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-    1: { label: 'Passed',   cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-    2: { label: 'Failed',   cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
+    0: { label: 'Active', cls: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
+    1: { label: 'Passed', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+    2: { label: 'Failed', cls: 'bg-red-500/20 text-red-400 border-red-500/30' },
     3: { label: 'Executed', cls: 'bg-zinc-700/40 text-zinc-500 border-zinc-600/30' },
   };
   const { label, cls } = cfg[state];
@@ -99,16 +165,19 @@ function TxStatus({
   isConfirming,
   isConfirmed,
   error,
+  receiptError,
 }: {
   isPending: boolean;
   isConfirming: boolean;
   isConfirmed: boolean;
   error: Error | null;
+  receiptError?: Error | null;
 }) {
-  if (error) return <p className="text-xs text-red-400">{error.message.split('\n')[0].slice(0, 120)}</p>;
-  if (isPending)   return <p className="text-xs text-zinc-400">Waiting for wallet…</p>;
+  const msg = decodeError(error) ?? decodeError(receiptError);
+  if (msg) return <p className="text-xs text-red-400">{msg}</p>;
+  if (isPending) return <p className="text-xs text-zinc-400">Waiting for wallet…</p>;
   if (isConfirming) return <p className="text-xs text-amber-400">Confirming…</p>;
-  if (isConfirmed)  return <p className="text-xs text-emerald-400">Confirmed!</p>;
+  if (isConfirmed) return <p className="text-xs text-emerald-400">Confirmed!</p>;
   return null;
 }
 
@@ -116,11 +185,11 @@ function TxStatus({
 
 export function SimpleDAODashboard() {
   const { address, isConnected } = useAccount();
-  const [descInput, setDescInput]     = useState('');
+  const [descInput, setDescInput] = useState('');
   const [periodInput, setPeriodInput] = useState('100');
-  const [activeTx, setActiveTx]       = useState<string | null>(null);
+  const [activeTx, setActiveTx] = useState<string | null>(null);
 
-  const dao   = { address: SIMPLE_DAO_ADDRESS,       abi: SIMPLE_DAO_ABI } as const;
+  const dao = { address: SIMPLE_DAO_ADDRESS, abi: SIMPLE_DAO_ABI } as const;
   const token = { address: GOVERNANCE_TOKEN_ADDRESS, abi: GOVERNANCE_TOKEN_ABI } as const;
 
   // ── Reads ─────────────────────────────────────────────────────────────────
@@ -142,7 +211,7 @@ export function SimpleDAODashboard() {
     query: { enabled: !!address },
   });
 
-  // Batch: getProposal(0..N-1)
+  // Batch: getProposal(0..N-1) — returns (Proposal, ProposalState), so no separate state call needed
   const proposalCalls = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
@@ -154,28 +223,16 @@ export function SimpleDAODashboard() {
     [count],
   );
 
-  // Batch: getProposalState(0..N-1)
-  const stateCalls = useMemo(
-    () =>
-      Array.from({ length: count }, (_, i) => ({
-        address: SIMPLE_DAO_ADDRESS,
-        abi: SIMPLE_DAO_ABI,
-        functionName: 'getProposalState' as const,
-        args: [BigInt(i)] as const,
-      })),
-    [count],
-  );
-
   // Batch: hasVoted(0..N-1, address)
   const hasVotedCalls = useMemo(
     () =>
       address
         ? Array.from({ length: count }, (_, i) => ({
-            address: SIMPLE_DAO_ADDRESS,
-            abi: SIMPLE_DAO_ABI,
-            functionName: 'hasVoted' as const,
-            args: [BigInt(i), address] as const,
-          }))
+          address: SIMPLE_DAO_ADDRESS,
+          abi: SIMPLE_DAO_ABI,
+          functionName: 'hasVoted' as const,
+          args: [BigInt(i), address] as const,
+        }))
         : [],
     [count, address],
   );
@@ -185,14 +242,31 @@ export function SimpleDAODashboard() {
     query: { enabled: count > 0 },
   });
 
-  const { data: statesRaw, refetch: refetchStates } = useReadContracts({
-    contracts: stateCalls,
-    query: { enabled: count > 0 },
-  });
+  console.log('[SimpleDAODashboard] proposalsRaw', proposalsRaw);
 
   const { data: hasVotedRaw, refetch: refetchVoted } = useReadContracts({
     contracts: hasVotedCalls,
     query: { enabled: !!address && count > 0 },
+  });
+
+  // ── Event watchers ────────────────────────────────────────────────────────
+
+  useWatchContractEvent({
+    ...dao,
+    eventName: 'SDAO__ProposalCreated',
+    onLogs: () => { void refetchCount(); void refetchProposals(); },
+  });
+
+  useWatchContractEvent({
+    ...dao,
+    eventName: 'SDAO__Voted',
+    onLogs: () => { void refetchProposals(); void refetchVoted(); },
+  });
+
+  useWatchContractEvent({
+    ...dao,
+    eventName: 'SDAO__ProposalExecuted',
+    onLogs: () => { void refetchProposals(); },
   });
 
   // ── Writes ────────────────────────────────────────────────────────────────
@@ -205,19 +279,24 @@ export function SimpleDAODashboard() {
     reset: resetWrite,
   } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+  const { isLoading: isConfirming, isSuccess: isConfirmed, error: receiptError } =
     useWaitForTransactionReceipt({ hash: txHash });
 
   useEffect(() => {
     if (isConfirmed) {
       refetchCount();
       refetchProposals();
-      refetchStates();
       refetchVoted();
       setDescInput('');
       setActiveTx(null);
     }
   }, [isConfirmed]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch proposals on every new block so state transitions (Active→Passed/Failed)
+  // are reflected without requiring a user action.
+  useEffect(() => {
+    if (count > 0) void refetchProposals();
+  }, [currentBlock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -232,16 +311,16 @@ export function SimpleDAODashboard() {
   const proposals = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => {
-        const id  = count - 1 - i;
+        const id = count - 1 - i;
         const raw = proposalsRaw?.[id]?.result;
-        // getProposal ABI has 2 outputs (Proposal, ProposalState).
-        // Viem returns them as [proposalTuple, stateUint]. We only need [0].
+        // getProposal returns (Proposal, ProposalState) — state is raw[1]
         const proposalData = (Array.isArray(raw) ? raw[0] : raw) as ProposalData | undefined;
-        const state        = statesRaw?.[id]?.result as ProposalState | undefined;
+        const state        = (Array.isArray(raw) ? raw[1] : undefined) as ProposalState | undefined;
         const voted        = hasVotedRaw?.[id]?.result as boolean | undefined;
+        console.log('[SimpleDAODashboard] proposal', { id, proposalData, state, voted });
         return { id, proposalData, state, voted };
       }),
-    [count, proposalsRaw, statesRaw, hasVotedRaw],
+    [count, proposalsRaw, hasVotedRaw],
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -372,8 +451,8 @@ export function SimpleDAODashboard() {
                 {isPending && activeTx === 'create'
                   ? 'Creating…'
                   : isConfirming && activeTx === 'create'
-                  ? 'Confirming…'
-                  : 'Create Proposal'}
+                    ? 'Confirming…'
+                    : 'Create Proposal'}
               </button>
               {activeTx === 'create' && (
                 <TxStatus
@@ -381,6 +460,7 @@ export function SimpleDAODashboard() {
                   isConfirming={isConfirming}
                   isConfirmed={isConfirmed}
                   error={writeError}
+                  receiptError={receiptError}
                 />
               )}
             </div>
@@ -401,9 +481,9 @@ export function SimpleDAODashboard() {
         ) : (
           <div className="space-y-4">
             {proposals.map(({ id, proposalData, state, voted }) => {
-              const isActive  = state === STATE.Active;
-              const isPassed  = state === STATE.Passed;
-              const canVote   = isConnected && isActive && !voted && hasVotingPower;
+              const isActive = state === STATE.Active;
+              const isPassed = state === STATE.Passed;
+              const canVote = isConnected && isActive && !voted && hasVotingPower;
               const canExecute = isConnected && isOwner && isPassed;
               const blocksLeft =
                 isActive && currentBlock !== undefined && proposalData?.deadline !== undefined
@@ -415,9 +495,8 @@ export function SimpleDAODashboard() {
               return (
                 <div
                   key={id}
-                  className={`rounded-xl border bg-zinc-900 p-5 ${
-                    isActive ? 'border-indigo-500/30' : 'border-zinc-800'
-                  }`}
+                  className={`rounded-xl border bg-zinc-900 p-5 ${isActive ? 'border-indigo-500/30' : 'border-zinc-800'
+                    }`}
                 >
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -431,9 +510,6 @@ export function SimpleDAODashboard() {
                         <span className="ml-1.5 text-indigo-400">
                           ({blocksLeft} blocks left · {blocksToTime(blocksLeft)})
                         </span>
-                      )}
-                      {blocksLeft !== null && blocksLeft <= 0 && (
-                        <span className="ml-1.5 text-zinc-500">(voting closed)</span>
                       )}
                     </div>
                   </div>
@@ -506,6 +582,7 @@ export function SimpleDAODashboard() {
                         isConfirming={isConfirming}
                         isConfirmed={isConfirmed}
                         error={writeError}
+                        receiptError={receiptError}
                       />
                     </div>
                   )}

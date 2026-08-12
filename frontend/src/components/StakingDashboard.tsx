@@ -12,6 +12,7 @@ import {
   useAccount,
   useReadContracts,
   useWaitForTransactionReceipt,
+  useWatchContractEvent,
   useWriteContract,
 } from 'wagmi';
 
@@ -153,6 +154,38 @@ export function StakingDashboard() {
   const [stakedAmount, pendingReward, , userRate] = userInfo ?? [undefined, undefined, undefined, undefined];
 
   const isOwner = address && contractOwner && address.toLowerCase() === contractOwner.toLowerCase();
+
+  // ── Event watchers (cross-client live updates) ────────────────────────────
+
+  useWatchContractEvent({
+    ...poolContract,
+    eventName: 'STKPOOL__Staked',
+    onLogs: () => { void refetchPool(); },
+  });
+
+  useWatchContractEvent({
+    ...poolContract,
+    eventName: 'STKPOOL__Unstaked',
+    onLogs: () => { void refetchPool(); },
+  });
+
+  useWatchContractEvent({
+    ...poolContract,
+    eventName: 'STKPOOL__RewardPaid',
+    onLogs: () => { void refetchPool(); },
+  });
+
+  useWatchContractEvent({
+    ...poolContract,
+    eventName: 'STKPOOL__RewardPoolFunded',
+    onLogs: () => { void refetchPool(); },
+  });
+
+  useWatchContractEvent({
+    ...poolContract,
+    eventName: 'STKPOOL__RewardRateUpdated',
+    onLogs: () => { void refetchPool(); },
+  });
 
   // ── Writes ────────────────────────────────────────────────────────────────
 
