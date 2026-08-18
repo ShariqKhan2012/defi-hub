@@ -160,30 +160,21 @@ export function StakingDashboard() {
   useWatchContractEvent({
     ...poolContract,
     eventName: 'STKPOOL__Staked',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchPool(); },
   });
 
   useWatchContractEvent({
     ...poolContract,
     eventName: 'STKPOOL__Unstaked',
-    onLogs: () => { void refetchPool(); },
-  });
-
-  useWatchContractEvent({
-    ...poolContract,
-    eventName: 'STKPOOL__RewardPaid',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchPool(); },
   });
 
   useWatchContractEvent({
     ...poolContract,
     eventName: 'STKPOOL__RewardPoolFunded',
-    onLogs: () => { void refetchPool(); },
-  });
-
-  useWatchContractEvent({
-    ...poolContract,
-    eventName: 'STKPOOL__RewardRateUpdated',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchPool(); },
   });
 

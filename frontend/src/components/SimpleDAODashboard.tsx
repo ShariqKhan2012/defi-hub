@@ -194,7 +194,7 @@ export function SimpleDAODashboard() {
 
   // ── Reads ─────────────────────────────────────────────────────────────────
 
-  const { data: currentBlock } = useBlockNumber({ watch: true });
+  const { data: currentBlock } = useBlockNumber({ watch: true, query: { refetchInterval: 10_000 } });
 
   const { data: countRaw, refetch: refetchCount } = useReadContract({
     ...dao,
@@ -242,8 +242,6 @@ export function SimpleDAODashboard() {
     query: { enabled: count > 0 },
   });
 
-  console.log('[SimpleDAODashboard] proposalsRaw', proposalsRaw);
-
   const { data: hasVotedRaw, refetch: refetchVoted } = useReadContracts({
     contracts: hasVotedCalls,
     query: { enabled: !!address && count > 0 },
@@ -254,18 +252,21 @@ export function SimpleDAODashboard() {
   useWatchContractEvent({
     ...dao,
     eventName: 'SDAO__ProposalCreated',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchCount(); void refetchProposals(); },
   });
 
   useWatchContractEvent({
     ...dao,
     eventName: 'SDAO__Voted',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchProposals(); void refetchVoted(); },
   });
 
   useWatchContractEvent({
     ...dao,
     eventName: 'SDAO__ProposalExecuted',
+    pollingInterval: 15_000,
     onLogs: () => { void refetchProposals(); },
   });
 
@@ -292,12 +293,6 @@ export function SimpleDAODashboard() {
     }
   }, [isConfirmed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refetch proposals on every new block so state transitions (Active→Passed/Failed)
-  // are reflected without requiring a user action.
-  useEffect(() => {
-    if (count > 0) void refetchProposals();
-  }, [currentBlock]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // ── Derived ───────────────────────────────────────────────────────────────
 
   const isOwner = !!(
@@ -317,7 +312,6 @@ export function SimpleDAODashboard() {
         const proposalData = (Array.isArray(raw) ? raw[0] : raw) as ProposalData | undefined;
         const state        = (Array.isArray(raw) ? raw[1] : undefined) as ProposalState | undefined;
         const voted        = hasVotedRaw?.[id]?.result as boolean | undefined;
-        console.log('[SimpleDAODashboard] proposal', { id, proposalData, state, voted });
         return { id, proposalData, state, voted };
       }),
     [count, proposalsRaw, hasVotedRaw],
