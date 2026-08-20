@@ -1,5 +1,6 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { anvil, sepolia } from 'wagmi/chains';
+import { http } from 'wagmi';
 
 const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'local-dev-no-wc';
@@ -15,5 +16,9 @@ export const config = getDefaultConfig({
   appName: 'DeFi Hub',
   projectId,
   chains,
+  transports: {
+    [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
+    [anvil.id]: http(),
+  },
   ssr: true,
 });
